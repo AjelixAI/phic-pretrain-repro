@@ -51,8 +51,28 @@ sample-10BT via `scripts/pretokenize.py`).
 Throughput: ~410k tok/s steady across 8 ranks (524,288 tokens/step × 5722
 steps = 3.0B tokens).
 
-## Results
+## Results (final)
 
-*(to be appended on completion: final val, downstream suite, OOD ppl,
-reference comparisons — Pythia-160m@step2000 matched-budget, Pythia final,
-SmolLM-135M.)*
+Final val loss: **4.53 nats** (ppl 92.7). Anneal contribution: −0.31 nats
+(4.84 stable-phase floor → 4.53 annealed).
+
+### Downstream (500-doc slices; ours = mean-logprob scoring ≈ lm-eval acc_norm; refs = lm-eval 0.4.13)
+
+| model | tokens | arc_easy | hellaswag | piqa | lambada |
+|---|---|---|---|---|---|
+| **Ajelix-Fiber-130M** | 3.0B | 20.4 | 26.8 | 46.2 | 6.8 |
+| Pythia-160m@step2000 (matched) | ≈2–4B | 35.4 | 36.8 | 58.0 | 14.6 |
+| Pythia-160m final | 300B | 42.6 | 39.0 | 62.2 | 12.6 |
+| SmolLM-135M | 1.1T | 59.6 | 46.6 | 69.4 | 35.6 |
+
+OOD: WikiText-103-raw test ppl 447.58 (loss 6.1038).
+
+### Honest caveats
+
+1. **Capacity mismatch**: 55.9M actual params vs Pythia's 160M at matched
+   tokens. A dense-56M control at the same budget is needed to separate the
+   architecture penalty from raw capacity.
+2. **Missing EOS separators** (found in review): pretokenize.py glued
+   documents without EOS between them — nonstandard vs GPT-2/Pythia/OLMo.
+   Fixed in pretokenize.py (eos between docs); corrected rerun Phase-A2.
+3. All reference rows are raw base models; budgets disclosed per row.
