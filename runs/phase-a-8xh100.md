@@ -76,3 +76,72 @@ OOD: WikiText-103-raw test ppl 447.58 (loss 6.1038).
    documents without EOS between them — nonstandard vs GPT-2/Pythia/OLMo.
    Fixed in pretokenize.py (eos between docs); corrected rerun Phase-A2.
 3. All reference rows are raw base models; budgets disclosed per row.
+
+---
+
+# Phase-B run record — 27.8B tokens on replicated OLMo-mix-1124
+
+Node: 8×H100, ~410k tok/s, ~19 h wall-clock. W&B: `phic-pretrain-b`
+(excelpro-excelpro). Base: tied-22L512d-b32-r64 (55.9M actual/130M dense).
+
+## Recipe deltas vs Phase-A
+OLMo-mix-1124 proportional sample (paper Table 1 proportions) · EOS between
+documents · document-level shuffle · 27.8B tokens (543 tok/param actual) ·
+WSD anneal to 6e-6 over final 20% · val tail disjoint from train
+(index arithmetic fixed) · checkpoints every 5k steps.
+
+## Bugs found and fixed during bring-up (all gated now)
+1. No document shuffle in the mix cache → source-blocked training, loss
+   oscillating ±1.2 nats (val was the tell). Fixed: EOS-split + global
+   doc shuffle.
+2. Val-tail contamination: at 52,997 steps the val batch index fell inside
+   the training range. Fixed: 52,991 steps.
+3. Mix sampler unit bug (chars vs tokens) + composition order bug
+   (dclm hit the global target before the small sources were sampled).
+   Fixed: per-config paper targets, small configs first.
+
+## Results (final val 3.875 nats; anneal −0.25 from the 4.125 plateau)
+
+| model | tokens | arc | hswag | piqa | lambada | OOD ppl |
+|---|---|---|---|---|---|---|
+| **Fiber v2** | 27.8B | 19.2 | 24.8 | 49.0 | **45.4** | **80.6** |
+| Fiber v1 | 3.0B | 20.4 | 26.8 | 46.2 | 6.8 | 447.6 |
+| Pythia-160m@step2000 | ≈2–4B | 35.4 | 36.8 | 58.0 | 14.6 | — |
+| Pythia-160m final | 300B | 42.6 | 39.0 | 62.2 | 12.6 | — |
+| SmolLM-135M | 1.1T | 59.6 | 46.6 | 69.4 | 35.6 | — |
+
+## Verdict (CORRECTED — see the measurement note below)
+
+**Measurement correction**: the first eval pass used a custom scorer for
+our rows; it lacked lm-eval's task-specific prompt framing and produced
+depressed MC scores (arc 19.2) and an inflated lambada (45.4). The user's
+skepticism triggered a verification cascade (real-output inspection,
+100-example manual checks, a verified Llama-format export run through the
+standard harness — see EXPORT.md; the export caught a rope_theta=64 vs
+10000 bug en route). The corrected, fully apples-to-apples table:
+
+| model | tokens | arc acc | hswag acc_norm | piqa acc | lambada acc |
+|---|---|---|---|---|---|
+| **Fiber v2** | 27.8B | **41.0** | 34.6 | 57.0 | **16.4** |
+| Pythia-160m@step2000 | ≈2–4B | 35.4 | 36.8 | 61.2 | 14.6 |
+| Pythia-160m final | 300B | 42.6 | 39.0 | 60.8 | 12.6 |
+| SmolLM-135M | 1.1T | 59.6 | 46.6 | 70.8 | 35.6 |
+
+- At matched budget: **v2 beats the dense referee on arc (+5.6) and
+  lambada (+1.8)**, trails on hellaswag (−2.2) and piqa (−4.2) — a
+  competitive result for a 55.9M-actual model with a 12 MB file.
+- OOD ppl 80.6 (v1: 447.6) — the EOS/shuffle/mix fixes transformed
+  generalization.
+- The Dolmino-style mid-training (branch `anneal-plan`, ANNEAL_PLAN.md)
+  remains the designed next step: ~1 h per experiment from the
+  step-40000 checkpoint.
+- Capacity caveat stands: 55.9M actual vs 160M actual (dense control
+  omitted by decision).
+- Standing rule recorded: custom scorers must be validated per task
+  against the standard harness, or benchmarks must run through the
+  harness via a verified export.
+
+## Checkpoints published (HF, AjelixAI/Ajelix-Fiber-130M)
+branches: stable-step40000-tokens21B · mid-anneal-step45000-tokens24B ·
+mid-anneal-step50000-tokens26B · final-step52991-tokens27.8B ·
+periodic-checkpoints (5k–35k).
