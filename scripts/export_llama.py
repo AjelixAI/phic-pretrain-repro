@@ -64,7 +64,7 @@ assert not missing and not unexpected, "export layout mismatch"
 ll = ll.cuda().to(torch.bfloat16).eval()
 
 # ---- equivalence check: our logits vs llama logits -----------------------
-tok = AutoTokenizer.from_pretrained("EleutherAI/gpt-neox-20b")
+tok = AutoTokenizer.from_pretrained(TOKID)
 x = torch.tensor([tok("The capital of France is",
                       add_special_tokens=False).input_ids]).cuda()
 with torch.no_grad():
