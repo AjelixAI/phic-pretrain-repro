@@ -111,3 +111,24 @@ ARM B1 started 17:25:48 UTC: step-0 loss 4.1176 vs the recorded plateau
 Arms: B1 (switch 9538 → 1.81B curated) → B2 (7269 → 3B) → A-full (pure
 6.81B tail; its cache = the 7B slice, single-touch). Per-arm evals are
 automated (verified export → lm-eval 0.4.13, the same-session protocol).
+
+## Verification cascade #2 (2026-09-15, user challenge: "is our model so bad?")
+
+Findings:
+1. **The original custom scorer (eval_ours.py) was broken**: it compared the
+   argmax against the OPTION POSITION, not the dataset's true label — piqa
+   scored at chance (49.2%), hellaswag ~25%, arc ~0% by construction. The
+   recorded "OUR-EVAL" rows were artifacts. Fixed (true labels) and the
+   fix verified by grep before deploy (the first patch silently
+   no-matched — deployed via verified anchors instead).
+2. **The exporter's argmax-agreement gate was missing** (only the logit
+   gate ran). Restored (>=95% over ~16k predictions) in export_llama.py.
+3. **Harness calibration**: Pythia-160m under OUR exact lm-eval 0.4.13
+   protocol scores arc 38.3 / hswag 28.3 / piqa 59.5 — matching its known
+   public levels. The harness is correct.
+4. **The model is NOT bad**: under the calibrated harness our base
+   (55.9M actual, 27.8B tokens) meets or beats Pythia-160m (3x params,
+   10x tokens) on arc and piqa, ~2 pts behind on hswag. The "so bad"
+   impression came from the broken scorer's rows.
+Standing rule reinforced: EVERY custom scorer must be validated against
+the harness before any recorded use.

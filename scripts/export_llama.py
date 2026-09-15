@@ -6,7 +6,10 @@ from transformers import LlamaConfig, LlamaForCausalLM, AutoTokenizer
 cfg = argparse.Namespace(mode="tied", d=512, layers=22, ffn=1792, block=32,
                          rank=64, stages=2)
 m = pt.LM(cfg).cuda().eval()
-sd = torch.load("/root/phi/ckpt_pretrain_tied-22L512d-b32-r64.pt",
+CKPT = sys.argv[1] if len(sys.argv) > 1 else "/root/phi/ckpt_pretrain_tied-22L512d-b32-r64.pt"
+OUTD = sys.argv[2] if len(sys.argv) > 2 else "/root/phi/export_llama"
+print(f"exporting {CKPT} -> {OUTD}", flush=True)
+sd = torch.load(CKPT,
                 map_location="cpu", weights_only=True)
 m.load_state_dict(sd, strict=True)
 print("model loaded", flush=True)
@@ -70,7 +73,24 @@ with torch.no_grad():
 d = (lo[0, -1].float() - ll_o[0, -1].float()).abs().max().item()
 rel = d / lo[0, -1].float().abs().max().item()
 print(f"logit equivalence: max|d|={d:.4e} rel={rel:.1e}", flush=True)
-print("EXPORT VERIFIED" if rel < 0.05 else "EXPORT DIVERGES", flush=True)
-ll.save_pretrained("/root/phi/export_llama")
-tok.save_pretrained("/root/phi/export_llama")
+# argmax-agreement gate: >=95% over >=16k real-data next-token predictions
+import numpy as np
+_stream = torch.load('/root/phi/data_cache_dolmino_shuf.pt',
+                     weights_only=True, mmap=True)
+agree_n = agree_hits = 0
+with torch.no_grad():
+    for i in range(160):
+        seg = torch.as_tensor(np.asarray(_stream[i * 4096:(i + 1) * 4096])).long().cuda()
+        if seg.numel() < 1025:
+            break
+        o_logits, _ = m(seg.unsqueeze(0))
+        l_logits = ll(seg.unsqueeze(0)).logits
+        agree_n += l_logits.shape[1] - 1
+        agree_hits += (o_logits[0, :-1].argmax(-1) == l_logits[0, :-1].argmax(-1)).sum().item()
+agree = agree_hits / max(agree_n, 1)
+print(f"argmax agreement over {agree_n} predictions: {agree*100:.1f}%", flush=True)
+ok = rel < 0.05 and agree >= 0.95
+print("EXPORT VERIFIED" if ok else "EXPORT DIVERGES", flush=True)
+ll.save_pretrained(OUTD)
+tok.save_pretrained(OUTD)
 print("saved /root/phi/export_llama", flush=True)

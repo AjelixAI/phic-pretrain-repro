@@ -40,13 +40,13 @@ def option_logprob(model, tok, ctx_ids, opt_ids):
 def mc_task(model, tok, docs, n_docs=500):
     correct = 0
     for doc in docs[:n_docs]:
-        ctx, opts = doc
+        ctx, opts, true_label = doc
         ctx_ids = tok(ctx, add_special_tokens=False).input_ids[-1024:]
         scores = []
-        for text, label in opts:
+        for text, idx in opts:
             opt_ids = tok(text, add_special_tokens=False).input_ids[-64:]
             scores.append(option_logprob(model, tok, ctx_ids, opt_ids))
-        if scores.index(max(scores)) == opts[0][1]:
+        if scores.index(max(scores)) == true_label:
             correct += 1
     return correct / min(len(docs), n_docs)
 
@@ -111,14 +111,17 @@ def main():
             if len(out) >= 500:
                 break
             if task == "piqa":
-                out.append((ex["goal"], [(ex["sol1"], 0), (ex["sol2"], 1)]))
+                out.append((ex["goal"], [(ex["sol1"], 0), (ex["sol2"], 1)],
+                            int(ex["label"])))
             elif task == "hellaswag":
                 out.append((ex["ctx"], [(t, i) for i, t in
-                                        enumerate(ex["endings"])]))
+                                        enumerate(ex["endings"])],
+                            int(ex["label"])))
             elif task == "arc_easy":
+                lab = ex["choices"]["label"].index(ex["answerKey"])
                 out.append((ex["question"],
-                            [(t, l) for t, l in zip(ex["choices"]["text"],
-                                                    ex["choices"]["label"])]))
+                            [(t, i) for i, t in
+                             enumerate(ex["choices"]["text"])], lab))
         return out
 
     for name, task, cfgname in [("piqa", "piqa", None),
