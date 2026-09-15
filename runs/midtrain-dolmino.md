@@ -93,3 +93,21 @@ for the final window (1.81B / 3B / 6.81B arms).
 prediction) by 4.6 points while leaving the MC tasks flat — the staged
 arms (generic tail preserved) are designed to test whether the staged
 mix fixes this.
+
+## Incident record (2026-09-15, disk-full corruption trap)
+
+The first 7B-shuffle save failed mid-write (disk 100% — 479 GB of stale HF
+cache from earlier experiments). The chain's existence check then launched
+arm B1 against a corrupt cache; it was killed within minutes (nothing
+trained on it, nothing shipped). Cleanup freed 479 GB; the shuffle was
+re-run and verified (6.291B tokens, EOS == docs, mixing gate raw 239 →
+shuffled 21). **Standing rule adopted: data-pipeline readiness checks must
+validate file integrity (size/token count), never mere existence.**
+
+## B1 launch (the matched-budget sweep is live)
+
+ARM B1 started 17:25:48 UTC: step-0 loss 4.1176 vs the recorded plateau
+4.125 (the byte-identical generic replay confirmed), ~1.24M tok/s.
+Arms: B1 (switch 9538 → 1.81B curated) → B2 (7269 → 3B) → A-full (pure
+6.81B tail; its cache = the 7B slice, single-touch). Per-arm evals are
+automated (verified export → lm-eval 0.4.13, the same-session protocol).
