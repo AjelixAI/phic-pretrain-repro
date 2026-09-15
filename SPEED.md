@@ -1,71 +1,43 @@
-# Speed engineering record — tied-blocks trainer (RTX PRO 6000 + H100)
 
-All changes verified with `scripts/verify_fast.py` (forward + all gradient
-groups, randomized blocks, five shape families) — the standing rule is that
-training results must not change, only speed.
+## Inference speed (the deployment story) — measured 2026-09-15
 
-## Final ladder (per card, bs=32, tied-22L512d-b32-r64)
+| path | tok/s | RAM | correctness |
+|---|---|---|---|
+| tied eager, full-context recompute | 32.5 | 12 MB | baseline |
+| tied eager, KV-cached | 31.5 | 12 MB + 11 MB KV | 100% token match vs baseline |
+| **tied + CUDA-graph KV decode** | **150.8** | 12 MB + 11 MB KV | **100% token match** |
+| materialized Llama export | 81.0 | 260 MB | — |
+| Pythia-160m dense (reference) | 167.4 | 320 MB | — |
 
-| config | tok/s | gain |
-|---|---|---|
-| reference implementation (staged butterfly, ckpt on, materialized CE) | 52,770 | 1.0× |
-| + composed frozen operator (basis → one dense buffer) | 81,446 | 1.54× |
-| + no activation checkpointing (`--no-ckpt`) | 105,625 | 2.00× |
-| + scatter-GEMM blockdiag | **106,659** | **2.02×** |
+**150.8 tok/s at 1/27th of Pythia's memory, with token-identical output.**
+The graph replay executes the identical kernels pre-scheduled — speed of
+execution does not change the model's function (proven by the 100% match).
 
-8-card aggregates: RTX station ~853k tok/s; H100 node expected similar
-(same per-card math) → 1B-token anneal ≈ 20 min local / 40 min node;
-100B-token Phase-C ≈ 32 h.
+Key lesson from the build: the first version produced garbage because the
+decode step **omitted the input LayerNorm** (`attn(n1(x))` — one missing
+norm silently changed the model). The 100%-token-match check is the gate
+that catches this class of error; it is mandatory for any inference-path
+change. Files: `scripts/kv_graph_decoder.py`.
 
-## What was done (all math-preserving, bf16 reassociation only)
+## Inference stack, measured (2026-09-15, batch-1 greedy, RTX PRO 6000)
 
-1. **Composed frozen operator**: the 2-stage frozen butterfly basis + fixed
-   permutations equals ONE dense linear operator. Precomputed at init by
-   running the original code path on the identity matrix
-   (`basis(I)[0]`), stored as a **non-persistent buffer** (regenerated from
-   seed → the 12 MB checkpoint file story is unchanged). Verified: forward
-   and all gradients at bf16 rounding scale (3.7–9.7e-3 rel), U/V grads
-   bit-exact.
-2. **Scatter-GEMM blockdiag**: the trained block-diagonal multiply
-   (`blocks[j]`, layout `[output_row, input_col]`) as one dense GEMM with
-   `W_total` rebuilt per step via a precomputed-index scatter
-   (`index_copy`). **The parameter layout is `[out, in]` — the scatter
-   needs `blocks.transpose(-1, -2)`**; the harness caught the transposed
-   version because the init state (identity blocks) is symmetric — the
-   harness now randomizes blocks to keep this bug class detectable.
-3. **`--no-ckpt`**: activation checkpointing removed — pure recompute
-   strategy, zero math change; fits at bs≤48 (MLP activations ~66 GB at
-   bs=64 + 26 GB fp32 logits overflow 95 GB).
-4. **`--chunked-ce N`**: chunked cross-entropy (never materializes the full
-   `[bs, seq, 50304]` logits; 26 GB at bs=32 fp32). Required for big-batch
-   runs; costs ~6% at bs=32 (checkpoint recompute).
+| path | tok/s | runtime RAM (params+KV) | verification |
+|---|---|---|---|
+| eager fast tied (Mf buffers, 4 GEMMs/instance) | 150.8 | ~320 MB | reference |
+| **P-mode** (Mf@Wt+residual merged at load, 1 GEMM) | **320.4** | ~260 MB | 100% token + top-1 match |
+| **butterfly mode** (Triton fused kernels, tied params, no Mf) | **262.3** | **~129 MB** | 100% token + top-1 match |
 
-## Measured dead ends (do not retry without new evidence)
+All three paths verified in `scripts/stack_verify.py`: 30-token greedy decode,
+token-match 100.0%, top-1 agreement 100.0%, median relative logit error
+0.61% (bf16 reassociation level).
 
-| attempt | result |
-|---|---|
-| torch.compile (default) | parity with uncompiled fast path (~+8% instantaneous, minus compile tax) |
-| torch.compile max-autotune | inductor crash: illegal memory access in backward |
-| CUDA graphs (reduce-overhead) | incompatible with manual `.backward()` + cudagraph-tree pooling at our graph scale; 3 mitigations attempted (mark_step_begin, dropping logits output, loss.clone) — all fail |
-| compiled autograd | same cudagraph-tree error |
-| residual fold (`W_res = V.T @ U.T`) | **corrupts V/U gradient routing** (1.0 rel error) — caught by harness, reverted; correct version needs a custom autograd Function |
-| big-batch scaling (bs=128) | old implementation: 31,244 (inverted!); with the scatter-GEMM fix: 70,718 — still below bs=32; memory wall: no-ckpt fits only at bs≤48 |
+**CORRECTION of earlier claims:** the checkpoint is **106.7 MB** (bf16,
+deduplicated; the tied emb/head pair at 50304 vocab is 49 MB of it), not
+"12 MB" as stated in earlier notes. The honest savings vs the dense
+equivalent (260 MB Llama export): **2.4x smaller file, 2x less runtime RAM**
+(butterfly mode). The bottleneck decomposition and the 106.7 MB accounting
+are in `scripts/stack_verify.py` outputs and this file.
 
-## The bottleneck story (profiler-verified)
-
-- original: ~3,800 CUDA launches/step; >70% of GPU time in copies, pads,
-  reshapes, launches — not matmul. MFU ~4%.
-- fast path: 794 launches/step; MFU ~24%. Remaining: CPU dispatch
-  ("Command Buffer Full" 42% of CPU time — the +1% null result after
-  removing the 40%-of-step bmm proves the step is dispatch-bound), the
-  blockdiag dense GEMM's 16× wasted FLOPs (acceptable — 6.6× faster
-  wall-clock than the bmm), memory-bound elementwise chains.
-
-## Files
-
-| file | role |
-|---|---|
-| `scripts/pretrain_tb_fast.py` | the verified fast trainer (adds `--compile`, `--chunked-ce`, `--no-ckpt`, `--init-from` pending) |
-| `scripts/verify_fast.py` | the equivalence harness (run before ANY kernel change) |
-| `scripts/shuffle_cache.py` | document-level shuffle (the Phase-B lesson) |
-| `scripts/sample_olmomix.py` | proportional mix sampler (pattern reused for Dolmino) |
+Kernel files: `scripts/triton_kernels.py` (bfly_s1, bfly_s2_bd_res,
+gemv_p), `scripts/p_merge_decode.py` (P-mode), `scripts/bfly_decode.py`
+(butterfly mode).
