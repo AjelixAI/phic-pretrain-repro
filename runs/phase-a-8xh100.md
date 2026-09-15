@@ -110,17 +110,36 @@ WSD anneal to 6e-6 over final 20% · val tail disjoint from train
 | Pythia-160m final | 300B | 42.6 | 39.0 | 62.2 | 12.6 | — |
 | SmolLM-135M | 1.1T | 59.6 | 46.6 | 69.4 | 35.6 | — |
 
-## Verdict
-- **lambada 45.4%: 3.6× the matched-budget dense referee, 3.6× Pythia's
-  300B-token final, above SmolLM-135M at 1/40th of its tokens.**
-- **OOD ppl 80.6** (v1: 447.6) — the EOS/shuffle/mix fixes transformed
+## Verdict (CORRECTED — see the measurement note below)
+
+**Measurement correction**: the first eval pass used a custom scorer for
+our rows; it lacked lm-eval's task-specific prompt framing and produced
+depressed MC scores (arc 19.2) and an inflated lambada (45.4). The user's
+skepticism triggered a verification cascade (real-output inspection,
+100-example manual checks, a verified Llama-format export run through the
+standard harness — see EXPORT.md; the export caught a rope_theta=64 vs
+10000 bug en route). The corrected, fully apples-to-apples table:
+
+| model | tokens | arc acc | hswag acc_norm | piqa acc | lambada acc |
+|---|---|---|---|---|---|
+| **Fiber v2** | 27.8B | **41.0** | 34.6 | 57.0 | **16.4** |
+| Pythia-160m@step2000 | ≈2–4B | 35.4 | 36.8 | 61.2 | 14.6 |
+| Pythia-160m final | 300B | 42.6 | 39.0 | 60.8 | 12.6 |
+| SmolLM-135M | 1.1T | 59.6 | 46.6 | 70.8 | 35.6 |
+
+- At matched budget: **v2 beats the dense referee on arc (+5.6) and
+  lambada (+1.8)**, trails on hellaswag (−2.2) and piqa (−4.2) — a
+  competitive result for a 55.9M-actual model with a 12 MB file.
+- OOD ppl 80.6 (v1: 447.6) — the EOS/shuffle/mix fixes transformed
   generalization.
-- The polarized weakness — formatted MC tasks (piqa/hellaswag/arc) behind
-  Pythia@matched — is the profile mid-training targets. The curated
-  Dolmino-style anneal (branch `anneal-plan`, ANNEAL_PLAN.md) is the
-  designed next step: ~1 h per experiment from the step-40000 checkpoint.
-- Capacity caveat stands: 55.9M actual vs 160M actual; the architecture
-  penalty vs capacity is not decomposed (dense control omitted by decision).
+- The Dolmino-style mid-training (branch `anneal-plan`, ANNEAL_PLAN.md)
+  remains the designed next step: ~1 h per experiment from the
+  step-40000 checkpoint.
+- Capacity caveat stands: 55.9M actual vs 160M actual (dense control
+  omitted by decision).
+- Standing rule recorded: custom scorers must be validated per task
+  against the standard harness, or benchmarks must run through the
+  harness via a verified export.
 
 ## Checkpoints published (HF, AjelixAI/Ajelix-Fiber-130M)
 branches: stable-step40000-tokens21B · mid-anneal-step45000-tokens24B ·
