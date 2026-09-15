@@ -8,6 +8,7 @@ Usage:
   python pretrain_tb.py --mode dense --gpu 0 --steps 6000
   python pretrain_tb.py --mode tied  --gpu 1 --steps 6000
 """
+import numpy as np
 import argparse
 import math
 import os
