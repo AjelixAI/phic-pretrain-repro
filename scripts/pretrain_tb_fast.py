@@ -482,6 +482,11 @@ def main():
                     if (step + 1 - _start) % (A.save_every * 4) == 0:
                         save_full(f"/root/phi/ckpt_{tag}{A.tag_suffix}_mile_{step + 1}.pt",
                                   _raw, opt, step + 1, A)
+                        miles = sorted(f for f in os.listdir('/root/phi')
+                                       if f.startswith(f"ckpt_{tag}{A.tag_suffix}_mile_"))
+                        for old in miles[:-5]:
+                            os.remove('/root/phi/' + old)
+                            print(f"milestone rotation: removed {old}", flush=True)
     if RANK == 0:
         outp = f"/root/phi/ckpt_pretrain_{tag}{A.tag_suffix}.pt"
         if os.path.exists(outp) and not A.force_save:
