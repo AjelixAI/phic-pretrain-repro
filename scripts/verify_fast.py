@@ -1,9 +1,9 @@
-import sys, torch, torch.nn.functional as F
-sys.path.insert(0, "/tmp/bench")
+import os, sys, torch, torch.nn.functional as F
 import importlib.util
-spec = importlib.util.spec_from_file_location("pt_old", "/tmp/bench/pretrain_tb.py")
+HERE = os.path.dirname(os.path.abspath(__file__))
+spec = importlib.util.spec_from_file_location("pt_old", os.path.join(HERE, "pretrain_tb.py"))
 old = importlib.util.module_from_spec(spec); spec.loader.exec_module(old)
-spec2 = importlib.util.spec_from_file_location("pt_new", "/tmp/bench/pretrain_tb_fast.py")
+spec2 = importlib.util.spec_from_file_location("pt_new", os.path.join(HERE, "pretrain_tb_fast.py"))
 new = importlib.util.module_from_spec(spec2); spec2.loader.exec_module(new)
 
 class C:  # minimal cfg
