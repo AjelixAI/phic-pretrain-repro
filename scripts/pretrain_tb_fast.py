@@ -385,6 +385,7 @@ def main():
                   flush=True)
     if A.compile:
         model = torch.compile(model, mode=os.environ.get("TCOMPILE_MODE", "default"))
+    _graph_mode = getattr(A, "graphs", False)
     npar = sum(p.numel() for p in model.parameters())
     if WORLD > 1:
         from torch.nn.parallel import DistributedDataParallel as DDP
@@ -394,7 +395,6 @@ def main():
     else:
         _raw = model
     print(f"[{tag}] params {npar/1e6:.1f}M | batches {nb}", flush=True)
-    _graph_mode = getattr(A, "graphs", False)
     opt = torch.optim.AdamW(model.parameters(), lr=A.lr, weight_decay=0.1,
                             betas=(0.9, 0.95), fused=True,
                             capturable=_graph_mode)
