@@ -132,3 +132,20 @@ Findings:
    impression came from the broken scorer's rows.
 Standing rule reinforced: EVERY custom scorer must be validated against
 the harness before any recorded use.
+
+## THE ROPE BUG (found 2026-09-15, user challenge: "we are missing something")
+
+`pretrain_tb.py:122`: `inv = 1.0 / (head_dim ** (arange(0, d, 2)/d))` — the
+**head_dim (64) used as the RoPE base** (llama-standard theta = 10000).
+Consequence: the slowest positional wavelength = 353 positions in a 2048
+context — **the positional signal aliases 6x**; the theoretical bound
+(arXiv 2602.10959, RoPE base bounds on positional coherence) requires the
+max wavelength >= the context. OLMo 2 itself uses rope_theta = 500,000
+(verified from its HF config). The generation-loop texture is the textbook
+signature of positional aliasing. The export doc had recorded rope_theta=64
+as a "gotcha" without recognizing the root bug.
+
+Fix: `--rope-base` (default 10000) in pretrain_tb_fast.py; Rotary wired
+from cfg. Probe queued: identical model + data + schedule at a matched
+2B-token budget, rope base 64 vs 10000 — comparing val loss, generation
+coherence, benchmarks. If the fix wins: full 27.8B retrain.

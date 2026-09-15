@@ -51,6 +51,10 @@ def parse():
                    help="second data cache; training reads it from --switch-step on (staged anneal)")
     p.add_argument("--switch-step", type=int, default=0,
                    help="step at which the data source switches to --cache2")
+    p.add_argument("--force-save", action="store_true",
+                   help="allow overwriting an existing checkpoint file (default: refuse)")
+    p.add_argument("--rope-base", type=float, default=10000.0,
+                   help="RoPE theta base; default 10000 (llama standard). 64 reproduces the old buggy encoding")
     return p.parse_args()
 
 A = None
@@ -161,9 +165,12 @@ class TiedLinear(nn.Module):
 
 # ------------------------------------------------------------- attention ---
 class Rotary(nn.Module):
-    def __init__(self, head_dim, max_seq=4096):
+    def __init__(self, head_dim, max_seq=4096, base=10000):
         super().__init__()
-        inv = 1.0 / (head_dim ** (torch.arange(0, head_dim, 2).float() / head_dim))
+        # BUG FIX: was head_dim ** (...) — the head_dim used as the RoPE base,
+        # aliasing the positional signal 6x within the 2048 context
+        # (slowest wavelength 353 << 2048). Standard llama theta = 10000.
+        inv = 1.0 / (base ** (torch.arange(0, head_dim, 2).float() / head_dim))
         t = torch.arange(max_seq).float()
         f = torch.outer(t, inv)
         self.register_buffer("cos", f.cos().bfloat16(), persistent=False)
@@ -186,7 +193,7 @@ class Attention(nn.Module):
         self.k = TiedLinear(d, self.h * self.hd // 4, cfg, seed * 4 + 1)   # GQA 2 kv
         self.v = TiedLinear(d, self.h * self.hd // 4, cfg, seed * 4 + 2)
         self.o = TiedLinear(d, d, cfg, seed * 4 + 3)
-        self.rot = Rotary(self.hd)
+        self.rot = Rotary(self.hd, base=getattr(cfg, "rope_base", 10000.0))
 
     def forward(self, x):
         B, S, _ = x.shape
@@ -426,8 +433,10 @@ def main():
                     torch.save(_raw.state_dict(),
                                f"/root/phi/ckpt_{tag}{A.tag_suffix}_step{step + 1}.pt")
     if RANK == 0:
-        torch.save(_raw.state_dict(),
-                   f"/root/phi/ckpt_pretrain_{tag}{A.tag_suffix}.pt")
+        outp = f"/root/phi/ckpt_pretrain_{tag}{A.tag_suffix}.pt"
+        if os.path.exists(outp) and not A.force_save:
+            raise SystemExit(f"SAVE REFUSED: {outp} exists (use --force-save)")
+        torch.save(_raw.state_dict(), outp)
     print(f"[{tag}] DONE", flush=True)
     wandb.finish()
 
