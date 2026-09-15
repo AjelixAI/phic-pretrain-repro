@@ -61,6 +61,8 @@ def parse():
                    help="RoPE theta base; default 10000 (llama standard). 64 reproduces the old buggy encoding")
     p.add_argument("--vocab", type=int, default=50304,
                    help="tokenizer vocab size (50304 = GPT-NeoX; 100352 = OLMo 2 tokenizer)")
+    p.add_argument("--val-file", default=None,
+                   help="held-out validation slice (disjoint from the train cache)")
     return p.parse_args()
 
 A = None
@@ -444,12 +446,18 @@ def main():
             print(f"[{tag}] step {step:5d} loss {loss.item():.4f} "
                   f"({tps:.0f} tok/s)", flush=True)
         if (step + 1) % 500 == 0 or step == A.steps - 1:
-            # held-out: last 2 batches as proxy val (proper OOD eval offline)
+            # held-out: --val-file (the held-out generic slice, disjoint from
+            # the train cache by construction) or the cache tail as the proxy
             model.eval()
             with torch.no_grad():
                 if hasattr(torch.compiler, "cudagraph_mark_step_begin"):
                     torch.compiler.cudagraph_mark_step_begin()
-                vb = flat[-TPB:].view(A.bs, A.seq).long().to(DEV)   # unseen tail
+                if getattr(A, "val_file", None):
+                    vf = torch.load(A.val_file, weights_only=True, mmap=True)
+                    voff = (step * 7919) % max(vf.numel() - TPB, 1)
+                    vb = torch.as_tensor(np.asarray(vf[voff:voff + TPB])).long().to(DEV).view(A.bs, A.seq)
+                else:
+                    vb = flat[-TPB:].view(A.bs, A.seq).long().to(DEV)   # unseen tail
                 _, vloss = model(vb, labels=vb)
             model.train()
             if RANK == 0:
