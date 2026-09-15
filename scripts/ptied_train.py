@@ -1,3 +1,4 @@
+import os
 import types
 import torch
 
@@ -38,6 +39,63 @@ class _FP8GEMM(torch.autograd.Function):
         gP = grad.T @ x          # [d_out, M] @ [M, d_in] -> [d_out, d_in]
         return gx, gP.T
 
+def build_fused_pairs(attn=None, mlp=None):
+    """Returns the fused-op closures for the attention (q+k+v -> one GEMM)
+    and the MLP (gate+up -> one GEMM). Math-identical: the same P matrices
+    concatenated along d_out; the outputs slice back apart."""
+    if attn is not None:
+        q, k, v = attn.q, attn.k, attn.v
+        def fused_qkv(x, rot):
+            n2q, dq = q.n2, q.d_out
+            P = torch.cat([_p_of(q), _p_of(k), _p_of(v)], dim=-1)  # [d_in, dq+dk+dv]
+            y = x.reshape(-1, x.shape[-1]) @ P
+            y = y.reshape(*x.shape[:-1], P.shape[-1])
+            qq = y[..., :dq]; kk = y[..., dq:dq+k.d_out]; vv = y[..., dq+k.d_out:]
+            return rot(qq), rot(kk), vv
+        return fused_qkv
+    if mlp is not None:
+        g, u = mlp
+        def fused_gu(x):
+            dg = g.d_out
+            P = torch.cat([_p_of(g), _p_of(u)], dim=-1)
+            y = x.reshape(-1, x.shape[-1]) @ P
+            y = y.reshape(*x.shape[:-1], P.shape[-1])
+            return y[..., :dg], y[..., dg:]
+        return fused_gu
+
+def _p_of(tl):
+    if not hasattr(tl, "_w_idx_slim"):
+        tl._w_idx_slim = _slim_w_idx(tl)
+    n2, d_out, nb_out = tl.n2, tl.d_out, tl.nb_out
+    Wt = torch.zeros(n2 * d_out, dtype=torch.bfloat16, device=tl.Mf.device)
+    Wt = Wt.index_copy(0, tl.w_idx_slim,
+                       tl.blocks[:nb_out].transpose(-1, -2).reshape(-1))
+    return tl.Mf @ Wt.view(n2, d_out) + tl.V.T @ tl.U.T
+
+class _FP8Build(torch.autograd.Function):
+    """the P's Mf@Wt in FP8; the exact-bf16 backward via the blockdiag
+    extraction of Mf.T @ dP (the blocks' gradients restored exactly)."""
+    @staticmethod
+    def forward(ctx, Mf, blocks, w_idx, n2, d_out, nb_out):
+        Wt = torch.zeros(n2 * d_out, dtype=torch.bfloat16, device=Mf.device)
+        Wt = Wt.index_copy(0, w_idx,
+                           blocks[:nb_out].transpose(-1, -2).reshape(-1))
+        qm, sm = _quantize_rowwise(Mf)
+        qw, sw = _quantize_colwise(Wt)
+        qw = qw.t().contiguous().t()
+        P = torch._scaled_mm(qm, qw, scale_a=sm, scale_b=sw,
+                             out_dtype=torch.bfloat16)
+        ctx.save_for_backward(Mf)
+        ctx.w_idx = w_idx; ctx.n2 = n2; ctx.d_out = d_out; ctx.nb_out = nb_out
+        return P
+    @staticmethod
+    def backward(ctx, dP):
+        Mf, = ctx.saved_tensors
+        dWt_full = Mf.T @ dP                      # [n2, d_out] bf16
+        dflat = dWt_full.reshape(-1)[ctx.w_idx]   # the blockdiag extraction
+        dblocks = dflat.view(ctx.nb_out, 32, 32).transpose(-1, -2)
+        return None, dblocks, None, None, None, None
+
 def _quantize_rowwise(t):
     """rowwise fp32 scales: a [M,K] -> q e4m3 + scale [M,1]; validated vs
     the bf16 reference (max-rel 3.4% = the e4m3 precision)."""
@@ -63,12 +121,27 @@ def ptied_forward(self, x):
         self._w_idx_slim = _slim_w_idx(self)
     n2, d_out, nb_out = self.n2, self.d_out, self.nb_out
     B, S = x.shape[0], x.shape[1]
-    Wt = torch.zeros(n2 * d_out, dtype=x.dtype, device=x.device)
-    Wt = Wt.index_copy(0, self._w_idx_slim,
-                       self.blocks[:nb_out].transpose(-1, -2).reshape(-1))
-    P = self.Mf @ Wt.view(n2, d_out) + self.V.T @ self.U.T
+    # the stale-P: the rebuild every K steps (the approximation - gated)
+    K = int(os.environ.get("P_REBUILD_EVERY", "1"))
+    if not hasattr(self, "_p_cache") or self._p_step is None:
+        self._p_cache = None; self._p_step = -10**9
+    rebuild = (self._p_cache is None) or (self._p_step // max(K,1) != (self._p_step + 1) // max(K,1))
+    rebuild = rebuild or K <= 1
+    if rebuild:
+        Wt = torch.zeros(n2 * d_out, dtype=x.dtype, device=x.device)
+        Wt = Wt.index_copy(0, self._w_idx_slim,
+                           self.blocks[:nb_out].transpose(-1, -2).reshape(-1))
+        if os.environ.get("FP8_BUILD") == "1" and n2 >= 1024:
+            Pb = _FP8Build.apply(self.Mf, self.blocks, self._w_idx_slim,
+                                 n2, d_out, nb_out)
+        else:
+            Pb = self.Mf @ Wt.view(n2, d_out)
+        P = Pb + self.V.T @ self.U.T
+        self._p_cache = P; self._p_step = self._p_step + 1 if self._p_step > -10**8 else 0
+    else:
+        self._p_step += 1
+    P = self._p_cache
     xf = x.reshape(B * S, self.d_in)
-    import os
     if os.environ.get("FP8_GEMM") == "1" and xf.shape[0] >= 4096:
         y = _FP8GEMM.apply(xf, P)
     else:
