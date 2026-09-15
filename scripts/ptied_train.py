@@ -77,23 +77,28 @@ class _FP8Build(torch.autograd.Function):
     extraction of Mf.T @ dP (the blocks' gradients restored exactly)."""
     @staticmethod
     def forward(ctx, Mf, blocks, w_idx, n2, d_out, nb_out):
+        print(f'FP8Build.apply: blocks {tuple(blocks.shape)} nb_out {nb_out}', flush=True)
         Wt = torch.zeros(n2 * d_out, dtype=torch.bfloat16, device=Mf.device)
         Wt = Wt.index_copy(0, w_idx,
                            blocks[:nb_out].transpose(-1, -2).reshape(-1))
+        Wt2 = Wt.view(n2, d_out)
         qm, sm = _quantize_rowwise(Mf)
-        qw, sw = _quantize_colwise(Wt)
+        qw, sw = _quantize_colwise(Wt2)
         qw = qw.t().contiguous().t()
         P = torch._scaled_mm(qm, qw, scale_a=sm, scale_b=sw,
                              out_dtype=torch.bfloat16)
         ctx.save_for_backward(Mf)
-        ctx.w_idx = w_idx; ctx.n2 = n2; ctx.d_out = d_out; ctx.nb_out = nb_out
+        ctx.w_idx = w_idx; ctx.n2 = n2; ctx.d_out = d_out
+        ctx.nb_out = nb_out; ctx.n_b = blocks.shape[0]
         return P
     @staticmethod
     def backward(ctx, dP):
         Mf, = ctx.saved_tensors
         dWt_full = Mf.T @ dP                      # [n2, d_out] bf16
         dflat = dWt_full.reshape(-1)[ctx.w_idx]   # the blockdiag extraction
-        dblocks = dflat.view(ctx.nb_out, 32, 32).transpose(-1, -2)
+        dblocks = torch.zeros(ctx.n_b, 32, 32, dtype=dflat.dtype,
+                              device=dflat.device)
+        dblocks[:ctx.nb_out] = dflat.view(ctx.nb_out, 32, 32).transpose(-1, -2)
         return None, dblocks, None, None, None, None
 
 def _quantize_rowwise(t):
