@@ -62,3 +62,34 @@ sizes, with the P-form merged-operator path ON, 154 instances).
 
 - final val loss: TBD
 - eval suite vs the raw Phase-B base and the references: TBD
+
+## Eval protocol reconciliation (2026-09-15, same-session)
+
+lm-eval 0.4.13, 0-shot, FULL validation sets, both models as verified
+Llama exports, same node, same day — this is now the authoritative
+protocol (internally apples-to-apples):
+
+| task | base (Phase-B, 27.8B) | mid 963M-Dolmino (22.0B total) |
+|---|---|---|
+| arc_easy acc | 39.4 | 39.7 |
+| hellaswag acc_norm | 26.5 | 26.5 |
+| piqa acc | 58.2 | 57.8 |
+| lambada_openai acc | 15.6 | **11.0 (−4.6)** |
+
+**Protocol discrepancy found**: the earlier recorded rows (arc 41.0,
+hswag acc_norm 34.6) do NOT reproduce under 0-shot (checked) or 10-shot
+(probed: hswag 26.5, arc 37.6) on this node/version. Their original
+invocation is not recoverable from the records; they are marked
+UNREPRODUCIBLE for cross-session comparison. All sweep arms are compared
+under the same-session protocol above.
+
+**Budget confound found and being fixed**: the 963M arm's total is 22.0B
+vs the base's 27.8B — a matched-budget staged sweep is running: same
+27.8B total, replaying the original generic tail from the step40000
+checkpoint (byte-identical trajectory) and switching to the Dolmino mix
+for the final window (1.81B / 3B / 6.81B arms).
+
+**First finding**: the pure-Dolmino tail regresses lambada (web-text
+prediction) by 4.6 points while leaving the MC tasks flat — the staged
+arms (generic tail preserved) are designed to test whether the staged
+mix fixes this.
