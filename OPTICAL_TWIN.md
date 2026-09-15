@@ -39,7 +39,7 @@ coprocessor — the 44× claim vs the bandwidth-bound GPU.
 | Ajelix-Fiber component | optical engine role |
 |---|---|
 | Frozen butterfly basis (seed-generated, **shared across all 22 layers**) | the physical cable/DMD stack — light propagating through the fiber *is* the basis matrix; one measured stack serves every layer (tied basis validated at +0.011 nats) |
-| The **12 MB file**: trained block-diagonal corrections + rank-64 residuals | the digital corrections — the only part that exists in silicon |
+| The **107 MB file** (measured): trained block-diagonal corrections + rank-64 residuals + the tied 50304-vocab emb/head pair | the digital corrections — the small part that exists in silicon |
 | Attention, norms, KV cache | coprocessor work |
 | The bandwidth wall | **eliminated by construction** — the base transform has zero weight reads |
 
