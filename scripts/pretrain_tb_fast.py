@@ -41,6 +41,12 @@ def parse():
                    help="rows per CE chunk; 0 = materialized logits (old path)")
     p.add_argument("--no-ckpt", action="store_true",
                    help="disable activation checkpointing (fits now with fast path)")
+    p.add_argument("--init-from", default=None,
+                   help="mid-training: load weights from a checkpoint (fresh optimizer, OLMo reset_trainer_state pattern)")
+    p.add_argument("--no-ptied", action="store_true",
+                   help="disable the P-form merged-operator training path")
+    p.add_argument("--tag-suffix", default="",
+                   help="appended to saved checkpoint names (protects prior artifacts)")
     return p.parse_args()
 
 A = None
@@ -287,8 +293,8 @@ def main():
     global A
     A = parse()
     if os.environ.get("COMPILED_AUTOGRAD"):
-        import torch._dynamo
-        torch._dynamo.config.compiled_autograd = True
+        import torch._dynamo as _dynamo
+        _dynamo.config.compiled_autograd = True
         print("compiled autograd: ON", flush=True)
     RANK = int(os.environ.get("RANK", "0"))
     WORLD = int(os.environ.get("WORLD_SIZE", "1"))
@@ -315,6 +321,18 @@ def main():
     nb = flat.numel() // (TPB * WORLD)                # batches per rank
 
     model = LM(A).to(DEV)
+    if A.init_from:
+        sd = torch.load(A.init_from, map_location="cpu", weights_only=True)
+        model.load_state_dict(sd, strict=True)
+        del sd
+        if RANK == 0:
+            print(f"RESUMED weights from {A.init_from}", flush=True)
+    if not A.no_ptied:
+        from ptied_train import enable_ptied
+        n_swapped = enable_ptied(model)
+        if RANK == 0:
+            print(f"P-form training path ON ({n_swapped} TiedLinears)",
+                  flush=True)
     if A.compile:
         model = torch.compile(model, mode=os.environ.get("TCOMPILE_MODE", "default"))
     npar = sum(p.numel() for p in model.parameters())
@@ -352,7 +370,18 @@ def main():
             # SANITY GATE: a random model on real text must have loss ~ ln(V)
             # ~10.8. A much smaller value means a label/leak bug (e.g. the
             # copy shortcut) - ABORT before wasting the run.
-            if loss.item() < 5.0:
+            if A.init_from:
+                # resume gate: step-0 loss must sit near the source
+                # checkpoint's recorded plateau val (Phase-B stable plateau
+                # ~4.125 nats); a big deviation = wrong ckpt/architecture
+                if not (2.8 < loss.item() < 5.4):
+                    print(f"RESUME ABORT: step-0 loss {loss.item():.2f} "
+                          f"outside resume band [2.8, 5.4] vs plateau ~4.125",
+                          flush=True)
+                    raise SystemExit(1)
+                print(f"RESUME GATE: step-0 loss {loss.item():.3f} vs "
+                      f"recorded plateau ~4.125 -> PASS", flush=True)
+            elif loss.item() < 5.0:
                 print(f"SANITY ABORT: step-0 loss {loss.item():.2f} < 5.0 "
                       f"(expected ~10.8) - label leak or data bug", flush=True)
                 raise SystemExit(1)
@@ -381,9 +410,10 @@ def main():
                 print(f"[{tag}] VAL {vloss.item():.4f}", flush=True)
                 if (step + 1) % 5000 == 0:
                     torch.save(_raw.state_dict(),
-                               f"/root/phi/ckpt_{tag}_step{step + 1}.pt")
+                               f"/root/phi/ckpt_{tag}{A.tag_suffix}_step{step + 1}.pt")
     if RANK == 0:
-        torch.save(_raw.state_dict(), f"/root/phi/ckpt_pretrain_{tag}.pt")
+        torch.save(_raw.state_dict(),
+                   f"/root/phi/ckpt_pretrain_{tag}{A.tag_suffix}.pt")
     print(f"[{tag}] DONE", flush=True)
     wandb.finish()
 
