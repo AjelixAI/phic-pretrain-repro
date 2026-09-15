@@ -1,0 +1,6 @@
+  starcoder: picking 2/863, target 72M
+    59M tok, cumulative 0.06B
+  dclm: picking 10/27938, target 1128M
+    934M tok, cumulative 0.99B
+  segment: 0.99B tokens (target 1.20B)
+saved /root/phi/data_cache_gatedata.pt 992863634

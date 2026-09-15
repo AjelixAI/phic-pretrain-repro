@@ -1,0 +1,13 @@
+params: 293.244928 M
+=== segment 1: bf16 ===
+  [bf16-1] step 0 loss 11.8092
+  [bf16-1] step 100 loss 2.6971
+  [bf16-1] step 200 loss 1.3887
+[bf16-1] segment mean (last 75%): 1.7991
+=== segment 2: FP8 ===
+  [fp8-1] step 0 loss 0.7726
+  [fp8-1] step 100 loss 0.7394
+  [fp8-1] step 200 loss 0.6563
+[fp8-1] segment mean (last 75%): 0.5971
+=== segment 3: bf16 ===
+  [bf16-2] step 0 loss 0.5883

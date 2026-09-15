@@ -1,0 +1,4 @@
+smoke val slices carved: 200000000.0 200000000.0
+=== SMOKE phase A: 1000 steps + saves ===
+=== SMOKE phase B: resume for another 1000 steps ===
+=== SMOKE COMPLETE ===
