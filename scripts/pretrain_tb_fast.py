@@ -62,7 +62,9 @@ def parse():
     p.add_argument("--vocab", type=int, default=50304,
                    help="tokenizer vocab size (50304 = GPT-NeoX; 100352 = OLMo 2 tokenizer)")
     p.add_argument("--val-file", default=None,
-                   help="held-out validation slice (disjoint from the train cache)")
+                   help="held-out general validation slice (disjoint from the train cache)")
+    p.add_argument("--val-file2", default=None,
+                   help="held-out anneal-domain validation slice (the skill-gain metric)")
     return p.parse_args()
 
 A = None
@@ -456,14 +458,24 @@ def main():
                     vf = torch.load(A.val_file, weights_only=True, mmap=True)
                     voff = (step * 7919) % max(vf.numel() - TPB, 1)
                     vb = torch.as_tensor(np.asarray(vf[voff:voff + TPB])).long().to(DEV).view(A.bs, A.seq)
+                    _, vloss = model(vb, labels=vb)
                 else:
                     vb = flat[-TPB:].view(A.bs, A.seq).long().to(DEV)   # unseen tail
-                _, vloss = model(vb, labels=vb)
+                    _, vloss = model(vb, labels=vb)
+                if getattr(A, "val_file2", None):
+                    vf2 = torch.load(A.val_file2, weights_only=True, mmap=True)
+                    voff2 = (step * 104729) % max(vf2.numel() - TPB, 1)
+                    vb2 = torch.as_tensor(np.asarray(vf2[voff2:voff2 + TPB])).long().to(DEV).view(A.bs, A.seq)
+                    _, vloss2 = model(vb2, labels=vb2)
             model.train()
             if RANK == 0:
-                wandb.log({"val/loss": vloss.item()}, step=step)
+                wandb.log({"val/general": vloss.item()}, step=step)
+                if getattr(A, "val_file2", None):
+                    wandb.log({"val/anneal_domain": vloss2.item()}, step=step)
             if RANK == 0:
-                print(f"[{tag}] VAL {vloss.item():.4f}", flush=True)
+                print(f"[{tag}] VAL general {vloss.item():.4f}"
+                      + (f" | anneal {vloss2.item():.4f}" if getattr(A, "val_file2", None) else ""),
+                      flush=True)
                 if A.save_every and (step + 1 - _start) % A.save_every == 0:
                     save_full(f"/root/phi/ckpt_{tag}{A.tag_suffix}_running.pt",
                               _raw, opt, step + 1, A)

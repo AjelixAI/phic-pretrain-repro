@@ -176,24 +176,31 @@ def main():
     g = np.random.default_rng(1234)
     perm = g.permutation(len(docs))
     ann_s = np.concatenate([docs[i] for i in perm])
-    print(f"  tail: {ann_s.size/1e9:.2f}B tokens, {len(docs)} docs", flush=True)
+    # the held-out anneal-domain val: the last 250M of the shuffled tail
+    VAL_A = min(250_000_000, ann_s.size // 10)
+    val_a = np.array(ann_s[ann_s.size - VAL_A:])
+    ann_train = ann_s[:ann_s.size - VAL_A]
+    torch.save(torch.from_numpy(val_a), "/root/phi/val_anneal_250M.pt")
+    print(f"  tail: {ann_s.size/1e9:.2f}B tokens; the anneal-val {VAL_A/1e6:.0f}M "
+          f"held out, the train {ann_train.size/1e9:.2f}B", flush=True)
     # the final assembly: the seg1_shuf (memmap) + the tail -> the torch cache
     mm = np.memmap(SHUF, dtype=np.int32, mode="r")
     n1 = mm.size
-    tot = n1 + ann_s.size
+    tot = n1 + ann_train.size
     tot = (tot // 65536) * 65536
     print(f"=== phase 4: the assembly ({tot/1e9:.2f}B tokens) ===", flush=True)
     out = np.memmap(FINAL + ".tmp", dtype=np.int32, mode="w+", shape=(tot,))
     out[:n1] = mm[:tot if tot <= n1 else n1]
     if tot > n1:
-        take = min(ann_s.size, tot - n1)
-        out[n1:n1 + take] = ann_s[:take]
+        take = min(ann_train.size, tot - n1)
+        out[n1:n1 + take] = ann_train[:take]
     out.flush()
     os.rename(FINAL + ".tmp", FINAL)
     os.remove(SHUF)
     n_eos_seg1 = int((np.memmap(SHUF, dtype=np.int32, mode="r") == EOS).sum()) if os.path.exists(SHUF) else -1
     print(f"GATES: EOS==docs check ran per segment; total {tot/1e9:.2f}B "
-          f"(generic {n1/1e9:.2f}B + tail {min(ann_s.size, max(tot-n1,0))/1e9:.2f}B)", flush=True)
+          f"(generic train {n1/1e9:.2f}B + anneal train "
+          f"{min(ann_train.size, max(tot-n1,0))/1e9:.2f}B + held-out vals)", flush=True)
     print("saved", FINAL, flush=True)
 
 if __name__ == "__main__":
