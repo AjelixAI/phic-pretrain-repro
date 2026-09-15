@@ -53,8 +53,14 @@ def parse():
                    help="step at which the data source switches to --cache2")
     p.add_argument("--force-save", action="store_true",
                    help="allow overwriting an existing checkpoint file (default: refuse)")
+    p.add_argument("--save-every", type=int, default=2500,
+                   help="full-checkpoint interval (weights+optimizer+step); 0 = final only")
+    p.add_argument("--resume", default=None,
+                   help="full checkpoint (weights+optimizer+step) to resume from")
     p.add_argument("--rope-base", type=float, default=10000.0,
                    help="RoPE theta base; default 10000 (llama standard). 64 reproduces the old buggy encoding")
+    p.add_argument("--vocab", type=int, default=50304,
+                   help="tokenizer vocab size (50304 = GPT-NeoX; 100352 = OLMo 2 tokenizer)")
     return p.parse_args()
 
 A = None
@@ -236,8 +242,10 @@ class Block(nn.Module):
 
 class LM(nn.Module):
     def __init__(self, cfg):
+        V = getattr(cfg, "vocab", 50304)
+        V = getattr(cfg, "vocab", 50304)
         super().__init__()
-        self.vocab = 50304                       # GPT-NeoX-20B tokenizer pad
+        self.vocab = V                           # tokenizer vocab (cfg.vocab, default 50304)
         self.emb = nn.Embedding(self.vocab, cfg.d, dtype=torch.bfloat16)
         with torch.no_grad():
             self.emb.weight.normal_(0, 0.02)   # standard tied-head init scale
@@ -300,6 +308,14 @@ def data_stream(steps, bs, seq):
     return flat
 
 # ---------------------------------------------------------------- training --
+def save_full(path, model, opt, step, A):
+    """weights + optimizer state + step: the full resume checkpoint."""
+    if os.path.exists(path) and not A.force_save and not path.endswith("running.pt"):
+        raise SystemExit(f"SAVE REFUSED: {path} exists (use --force-save)")
+    torch.save({"step": step, "model": model.state_dict(),
+                "opt": opt.state_dict(), "args": vars(A)}, path)
+    print(f"FULL SAVE {path} @step {step}", flush=True)
+
 def main():
     global A
     A = parse()
@@ -344,6 +360,15 @@ def main():
         del sd
         if RANK == 0:
             print(f"RESUMED weights from {A.init_from}", flush=True)
+    if A.resume:
+        ck = torch.load(A.resume, map_location="cpu", weights_only=False)
+        model.load_state_dict(ck["model"], strict=True)
+        opt.load_state_dict(ck["opt"])
+        A._start_step = ck["step"]
+        del ck
+        if RANK == 0:
+            print(f"FULL RESUME from {A.resume} @step {ck['step'] if False else A._start_step}",
+                  flush=True)
     if not A.no_ptied:
         from ptied_train import enable_ptied
         n_swapped = enable_ptied(model)
@@ -372,7 +397,8 @@ def main():
         return max(0.02, 1.0 - frac)
     model.train()
     t0 = time.time()
-    for step in range(A.steps):
+    _start = getattr(A, "_start_step", 0)
+    for step in range(_start, A.steps):
         if A.cache2 and step >= A.switch_step:
             src, nb_src = flat2, nb2
         else:
@@ -388,10 +414,11 @@ def main():
         if os.environ.get("COMPILED_AUTOGRAD"):
             loss = loss.clone()   # detach from cudagraph buffer before next replay
         if step == 0 and RANK == 0:
+            import math
             # SANITY GATE: a random model on real text must have loss ~ ln(V)
             # ~10.8. A much smaller value means a label/leak bug (e.g. the
             # copy shortcut) - ABORT before wasting the run.
-            if A.init_from:
+            if A.init_from or A.resume:
                 # resume gate: step-0 loss must sit near the source
                 # checkpoint's recorded plateau val (Phase-B stable plateau
                 # ~4.125 nats); a big deviation = wrong ckpt/architecture
@@ -402,7 +429,7 @@ def main():
                     raise SystemExit(1)
                 print(f"RESUME GATE: step-0 loss {loss.item():.3f} vs "
                       f"recorded plateau ~4.125 -> PASS", flush=True)
-            elif loss.item() < 5.0:
+            elif loss.item() < math.log(getattr(A, "vocab", 50304)) - 5.0:
                 print(f"SANITY ABORT: step-0 loss {loss.item():.2f} < 5.0 "
                       f"(expected ~10.8) - label leak or data bug", flush=True)
                 raise SystemExit(1)
@@ -429,9 +456,12 @@ def main():
                 wandb.log({"val/loss": vloss.item()}, step=step)
             if RANK == 0:
                 print(f"[{tag}] VAL {vloss.item():.4f}", flush=True)
-                if (step + 1) % 5000 == 0:
-                    torch.save(_raw.state_dict(),
-                               f"/root/phi/ckpt_{tag}{A.tag_suffix}_step{step + 1}.pt")
+                if A.save_every and (step + 1 - _start) % A.save_every == 0:
+                    save_full(f"/root/phi/ckpt_{tag}{A.tag_suffix}_running.pt",
+                              _raw, opt, step + 1, A)
+                    if (step + 1 - _start) % (A.save_every * 4) == 0:
+                        save_full(f"/root/phi/ckpt_{tag}{A.tag_suffix}_mile_{step + 1}.pt",
+                                  _raw, opt, step + 1, A)
     if RANK == 0:
         outp = f"/root/phi/ckpt_pretrain_{tag}{A.tag_suffix}.pt"
         if os.path.exists(outp) and not A.force_save:

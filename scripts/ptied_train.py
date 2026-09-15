@@ -1,6 +1,13 @@
 import types
 import torch
-from pretrain_tb_fast import TiedLinear
+
+
+def _is_tied(child):
+    """Duck-typed check: robust to the __main__-vs-imported-module class
+    split when the trainer runs as a script."""
+    return (type(child).__name__ == "TiedLinear"
+            and all(hasattr(child, a) for a in
+                    ("basis", "blocks", "Mf", "U", "V", "n2")))
 
 def _slim_w_idx(tl):
     """w_idx for the [n2, d_out] slim Wt (only the used block-columns)."""
@@ -11,12 +18,46 @@ def _slim_w_idx(tl):
         + torch.arange(b, device=tl.w_idx.device)[None, None, :]
     return (rows * tl.d_out + cols).reshape(-1)
 
+class _FP8GEMM(torch.autograd.Function):
+    """the forward GEMM in FP8 (rowwise scales), the exact-bf16 backward.
+    The gradient math is IDENTICAL to the bf16 path; only the forward's
+    y = x @ P product is quantized."""
+    @staticmethod
+    def forward(ctx, x, P):
+        q, sx = _quantize_rowwise(x)
+        qp, sp = _quantize_colwise(P)
+        qp = qp.t().contiguous().t()
+        y = torch._scaled_mm(q, qp, scale_a=sx, scale_b=sp,
+                             out_dtype=torch.bfloat16)
+        ctx.save_for_backward(x, P)
+        return y
+    @staticmethod
+    def backward(ctx, grad):
+        x, P = ctx.saved_tensors
+        gx = grad @ P.T          # [M, d_out] @ [d_out, d_in]
+        gP = grad.T @ x          # [d_out, M] @ [M, d_in] -> [d_out, d_in]
+        return gx, gP.T
+
+def _quantize_rowwise(t):
+    """rowwise fp32 scales: a [M,K] -> q e4m3 + scale [M,1]; validated vs
+    the bf16 reference (max-rel 3.4% = the e4m3 precision)."""
+    scale = t.abs().amax(-1, keepdim=True).clamp(min=1e-6).float() / 448
+    q = (t / scale).clamp(-448, 448).to(torch.float8_e4m3fn)
+    return q, scale
+
+def _quantize_colwise(t):
+    scale = t.abs().amax(0, keepdim=True).clamp(min=1e-6).float() / 448
+    q = (t / scale).clamp(-448, 448).to(torch.float8_e4m3fn)
+    return q, scale
+
 def ptied_forward(self, x):
     """Training path: the TiedLinear as ONE dense operator, differentiable.
 
     P = (Mf @ Wt_slim) + V.T @ U.T, rebuilt each call (per optimizer step);
     forward and backward are plain dense GEMMs. Math identical to
     TiedLinear.forward up to bf16 reassociation.
+    With FP8_GEMM=1: the x@P and the backward GEMMs run in FP8
+    (_scaled_mm); the master weights, P, and the optimizer stay bf16.
     """
     if not hasattr(self, "_w_idx_slim"):
         self._w_idx_slim = _slim_w_idx(self)
@@ -26,7 +67,12 @@ def ptied_forward(self, x):
     Wt = Wt.index_copy(0, self._w_idx_slim,
                        self.blocks[:nb_out].transpose(-1, -2).reshape(-1))
     P = self.Mf @ Wt.view(n2, d_out) + self.V.T @ self.U.T
-    y = x.reshape(B * S, self.d_in) @ P
+    xf = x.reshape(B * S, self.d_in)
+    import os
+    if os.environ.get("FP8_GEMM") == "1" and xf.shape[0] >= 4096:
+        y = _FP8GEMM.apply(xf, P)
+    else:
+        y = xf @ P
     return y.reshape(B, S, d_out)
 
 def enable_ptied(model):
@@ -35,7 +81,7 @@ def enable_ptied(model):
     n = 0
     for mod in model.modules():
         for attr, child in list(mod.named_children()):
-            if isinstance(child, TiedLinear):
+            if _is_tied(child):
                 child.forward = types.MethodType(ptied_forward, child)
                 n += 1
     return n
@@ -43,8 +89,8 @@ def enable_ptied(model):
 def disable_ptied(model):
     for mod in model.modules():
         for attr, child in list(mod.named_children()):
-            if isinstance(child, TiedLinear) and \
+            if _is_tied(child) and \
                     isinstance(child.forward, types.MethodType) and \
                     child.forward.__func__ is ptied_forward:
-                child.forward = types.MethodType(TiedLinear.forward, child)
+                child.forward = types.MethodType(type(child).forward, child)
     return None
