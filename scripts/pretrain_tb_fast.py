@@ -66,6 +66,8 @@ def parse():
                    help="held-out general validation slice (disjoint from the train cache)")
     p.add_argument("--val-file2", default=None,
                    help="held-out anneal-domain validation slice (the skill-gain metric)")
+    p.add_argument("--graphs", action="store_true",
+                   help="capture the training step as ONE CUDA graph (the math-identical execution, the dispatch removed)")
     return p.parse_args()
 
 A = None
@@ -386,13 +388,16 @@ def main():
     npar = sum(p.numel() for p in model.parameters())
     if WORLD > 1:
         from torch.nn.parallel import DistributedDataParallel as DDP
-        model = DDP(model, device_ids=[RANK % WORLD])
+        model = DDP(model, device_ids=[RANK % WORLD],
+                    static_graph=_graph_mode)
         _raw = model.module
     else:
         _raw = model
     print(f"[{tag}] params {npar/1e6:.1f}M | batches {nb}", flush=True)
+    _graph_mode = getattr(A, "graphs", False)
     opt = torch.optim.AdamW(model.parameters(), lr=A.lr, weight_decay=0.1,
-                            betas=(0.9, 0.95), fused=True, capturable=True)
+                            betas=(0.9, 0.95), fused=True,
+                            capturable=_graph_mode)
     if ck_opt is not None:
         opt.load_state_dict(ck_opt)
         del ck_opt
@@ -407,6 +412,10 @@ def main():
         frac = (s - A.decay_start) / max(A.steps - A.decay_start, 1)
         return max(0.02, 1.0 - frac)
     model.train()
+    _graph = None
+    xb_s = torch.zeros(A.bs, A.seq, dtype=torch.long, device=DEV)
+    loss_s = torch.zeros((), device=DEV)
+    opt_lr = torch.tensor(A.lr, device=DEV)
     t0 = time.time()
     _start = getattr(A, "_start_step", 0)
     for step in range(_start, A.steps):
@@ -417,11 +426,31 @@ def main():
         off = ((step * WORLD + RANK) % nb_src) * TPB
         xb = src[off : off + TPB].view(A.bs, A.seq).long().to(DEV)
         lr = A.lr * lr_at(step)
-        for gparam in opt.param_groups:
-            gparam["lr"] = lr
+        if _graph_mode:
+            opt_lr.fill_(lr)
+            for gparam in opt.param_groups:
+                gparam["lr"] = opt_lr
+        else:
+            for gparam in opt.param_groups:
+                gparam["lr"] = lr
         if hasattr(torch.compiler, "cudagraph_mark_step_begin"):
             torch.compiler.cudagraph_mark_step_begin()
-        _, loss = model(xb, labels=xb)
+        if _graph_mode and step - _start == 3:
+            _graph = torch.cuda.CUDAGraph()
+            xb_s.copy_(xb)
+            with torch.cuda.graph(_graph):
+                _, loss_s = model(xb_s, labels=xb_s)
+                loss_s.backward()
+                opt.step()
+                opt.zero_grad(set_to_none=False)
+            if RANK == 0:
+                print(f"[{tag}] CUDA graph captured at step {step}", flush=True)
+        if _graph_mode and step - _start > 3:
+            xb_s.copy_(xb)
+            _graph.replay()
+            loss = loss_s
+        else:
+            _, loss = model(xb, labels=xb)
         if os.environ.get("COMPILED_AUTOGRAD"):
             loss = loss.clone()   # detach from cudagraph buffer before next replay
         if step == 0 and RANK == 0:
