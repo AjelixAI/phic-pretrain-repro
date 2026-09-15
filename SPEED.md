@@ -41,3 +41,29 @@ are in `scripts/stack_verify.py` outputs and this file.
 Kernel files: `scripts/triton_kernels.py` (bfly_s1, bfly_s2_bd_res,
 gemv_p), `scripts/p_merge_decode.py` (P-mode), `scripts/bfly_decode.py`
 (butterfly mode).
+
+## Training on the same logic (2026-09-15)
+
+`scripts/ptied_train.py`: `enable_ptied(model)` swaps every TiedLinear's
+forward to the merged-operator form — `P = Mf @ Wt_slim + V.T @ U.T`
+rebuilt once per forward call (per optimizer step, ~200 GFLOP, amortized
+over the whole batch), so forward AND backward become plain dense GEMMs.
+Modules/params untouched: the optimizer still trains only the 57 MB of
+corrections; P is a derived view.
+
+Measured (single RTX PRO 6000, 8x1024-token steps, forward+backward+step):
+
+| path | ms/step | tok/s |
+|---|---|---|
+| eager fast tied | 206.5 | 39,667 |
+| **P-form training** | **173.2** | **47,303** (1.19x) |
+
+Verification (`scripts/ptied_verify.py`):
+- gradients vs the eager fast path: worst rel error 0.75% (bf16
+  reassociation level) across blocks/U/V, all 4 shape families;
+- 50-step loss curves (fixed seed/data): identical to 3 decimals,
+  final-loss |d| = 0.0001.
+
+Adoption: one line — `from ptied_train import enable_ptied; enable_ptied(m)`
+after model construction in any training script. The runtime RAM for a
+training step stays < 1 GB on top of the weights.

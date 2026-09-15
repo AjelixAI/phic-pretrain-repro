@@ -39,14 +39,15 @@ coprocessor — the 44× claim vs the bandwidth-bound GPU.
 | Ajelix-Fiber component | optical engine role |
 |---|---|
 | Frozen butterfly basis (seed-generated, **shared across all 22 layers**) | the physical cable/DMD stack — light propagating through the fiber *is* the basis matrix; one measured stack serves every layer (tied basis validated at +0.011 nats) |
-| The **12 MB file**: trained block-diagonal corrections + rank-64 residuals | the digital corrections — the only part that exists in silicon |
+| The **107 MB file** (measured): trained block-diagonal corrections + rank-64 residuals + the tied 50304-vocab emb/head pair | the digital corrections — the small part that exists in silicon |
 | Attention, norms, KV cache | coprocessor work |
 | The bandwidth wall | **eliminated by construction** — the base transform has zero weight reads |
 
 Consequence for the model file: on the optical engine the file shrinks
 again — the basis is physical glass ("copying the model = photocopying").
-The 12 MB digital file **is the corrections**: the only part ever meant
-for silicon.
+The digital file **is the corrections + the tied I/O**: the small part ever
+meant for silicon (the basis itself is regenerable from the seed and can be
+dropped from the file: -19.5 MB).
 
 ## 4. What Phase-B proved (the precondition the hardware needed)
 
@@ -59,7 +60,7 @@ for silicon.
 2. **The basis is seed-deterministic and layer-shared** — physically: one
    cable stack, no per-layer storage. Validated (+0.011 nats).
 3. **The deployment execution model works**: the KV-cached CUDA-graph
-   decoder does **150.8 tok/s at 12 MB weights** with token-identical
+   decoder does **150.8 tok/s eager-tied** with token-identical
    output (100% match vs the full-context decoder) — the same
    philosophy the optical engine embodies: tiny scheduled digital work,
    the heavy lifting in the substrate.
@@ -70,8 +71,9 @@ for silicon.
 
 ## 5. Honest scope
 
-- **Delivered by the software model**: model file ~22× smaller (bf16
-  dense comparison), competitive quality at matched budget, the
+- **Delivered by the software model**: model file 2.4× smaller (bf16, measured: 106.7 MB vs the 260 MB dense
+  export; an earlier note said "12 MB / 22×" — an accounting error,
+  corrected 2026-09-15), competitive quality at matched budget, the
   factorization-tolerance proof, the training/deployment pipeline.
 - **Not delivered by software, by design**: the speed and energy claims
   (44×, 7,800 tok/s) live in the optical hardware. In pure software the
@@ -88,7 +90,7 @@ for silicon.
 | Wave-optics proof suite (validated vs live measurement, V3) | ✅ done (`proof/` in the parent repo) |
 | BOM + bench procedures (~1,000 EUR: 4K DMD, multimode cables / liquid guides, line-scan cameras / photodiode banks, Xeon/FPGA for corrections) | ✅ documented (`hardware/`) |
 | **Measure the REAL cable stack's transfer matrix** | ⏳ calibration study — the physical fiber ≠ the seed ideal |
-| **Retrain the corrections against the MEASURED matrix** | ⏳ cheap here: the corrections are the 12 MB — the training pipeline swaps the seed-basis for the measured matrix natively (hours, not weeks) |
+| **Retrain the corrections against the MEASURED matrix** | ⏳ cheap here: the corrections are the small trained part — the pipeline swaps the seed-basis for the measured matrix natively (hours, not weeks) |
 | **Analog-precision tolerance test** | ⏳ inject the measured photodiode/driver noise into the basis during eval; quantify the quality drop (bf16 tolerance suggests robustness; analog noise is a different noise model) |
 | **End-to-end bench: optical inference cross-verified vs the digital twin** | the final proof — 100%-match gates, same as everything else in this project |
 
