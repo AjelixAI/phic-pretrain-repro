@@ -47,6 +47,10 @@ def parse():
                    help="disable the P-form merged-operator training path")
     p.add_argument("--tag-suffix", default="",
                    help="appended to saved checkpoint names (protects prior artifacts)")
+    p.add_argument("--cache2", default=None,
+                   help="second data cache; training reads it from --switch-step on (staged anneal)")
+    p.add_argument("--switch-step", type=int, default=0,
+                   help="step at which the data source switches to --cache2")
     return p.parse_args()
 
 A = None
@@ -319,6 +323,12 @@ def main():
         torch.save(flat, CACHE)
     TPB = A.bs * A.seq                                # tokens per rank-batch
     nb = flat.numel() // (TPB * WORLD)                # batches per rank
+    if A.cache2:
+        flat2 = torch.load(A.cache2, weights_only=True, mmap=True)
+        nb2 = flat2.numel() // (TPB * WORLD)
+        if RANK == 0:
+            print(f"cache2 {A.cache2}: {flat2.numel()/1e9:.2f}B tok, "
+                  f"switch at step {A.switch_step}", flush=True)
 
     model = LM(A).to(DEV)
     if A.init_from:
@@ -356,8 +366,12 @@ def main():
     model.train()
     t0 = time.time()
     for step in range(A.steps):
-        off = ((step * WORLD + RANK) % nb) * TPB
-        xb = flat[off : off + TPB].view(A.bs, A.seq).long().to(DEV)
+        if A.cache2 and step >= A.switch_step:
+            src, nb_src = flat2, nb2
+        else:
+            src, nb_src = flat, nb
+        off = ((step * WORLD + RANK) % nb_src) * TPB
+        xb = src[off : off + TPB].view(A.bs, A.seq).long().to(DEV)
         lr = A.lr * lr_at(step)
         for gparam in opt.param_groups:
             gparam["lr"] = lr

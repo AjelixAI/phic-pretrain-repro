@@ -3,8 +3,9 @@
 cache is invalid — the Phase-B standing warning). Verifies mixing, not just
 asserting it."""
 import torch, collections
-SRC = "/root/phi/data_cache_dolmino_raw.pt"
-DST = "/root/phi/data_cache_dolmino_shuf.pt"
+import sys
+SRC = sys.argv[1] if len(sys.argv) > 1 else "/root/phi/data_cache_dolmino_raw.pt"
+DST = sys.argv[2] if len(sys.argv) > 2 else "/root/phi/data_cache_dolmino_shuf.pt"
 t = torch.load(SRC, weights_only=True, mmap=True)
 EOS = 0
 idx = (t == EOS).nonzero().flatten()
