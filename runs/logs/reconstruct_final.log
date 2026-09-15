@@ -1,0 +1,31 @@
+RESUMED weights from /root/phi/ckpt_tied-22L512d-b32-r64_step50000.pt
+P-form training path ON (154 TiedLinears)
+[tied-22L512d-b32-r64] params 55.9M | batches 423946
+Traceback (most recent call last):
+  File "/root/phi/pretrain_tb_fast.py", line 439, in <module>
+    main()
+  File "/root/phi/pretrain_tb_fast.py", line 382, in main
+    _, loss = model(xb, labels=xb)
+              ^^^^^^^^^^^^^^^^^^^^
+  File "/root/venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/phi/pretrain_tb_fast.py", line 253, in forward
+    h = b(h)
+        ^^^^
+  File "/root/venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/venv/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/phi/pretrain_tb_fast.py", line 230, in forward
+    return self._core(x)
+           ^^^^^^^^^^^^^
+  File "/root/phi/pretrain_tb_fast.py", line 223, in _core
+    return x + self.down(F.silu(self.gate(h)) * self.up(h))
+                         ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 224.00 MiB. GPU 0 has a total capacity of 79.18 GiB of which 62.31 MiB is free. Process 230758 has 47.50 GiB memory in use. Including non-PyTorch memory, this process has 31.61 GiB memory in use. Of the allocated memory 30.79 GiB is allocated by PyTorch, and 159.20 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)

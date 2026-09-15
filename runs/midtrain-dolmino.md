@@ -149,3 +149,35 @@ Fix: `--rope-base` (default 10000) in pretrain_tb_fast.py; Rotary wired
 from cfg. Probe queued: identical model + data + schedule at a matched
 2B-token budget, rope base 64 vs 10000 — comparing val loss, generation
 coherence, benchmarks. If the fix wins: full 27.8B retrain.
+
+## Final state (2026-09-15) — node shutdown, everything preserved
+
+**Sweep stopped per operator instruction (H100 node being decommissioned).**
+Completed and preserved: B1 (full, evaluated, on HF), B2 (periodic ckpts at
+run-steps 5000/10000 = 26.2B tokens total, pushed), the 963M arm (on HF),
+the reconstruction (CANCELED — would have been base-64 anyway; the rope bug
+supersedes it), the rope probe (CANCELED on the node — to be re-run on the
+next machine).
+
+**The RoPE bug is the headline finding of the session**: head_dim(64) used
+as the RoPE base — positional aliasing 6x in the 2048 context; every model
+trained to date carries it; the fix (--rope-base 10000, verified against
+the textbook formula) is committed and queued for validation (probe pair:
+2B tokens, base 64 vs 10000).
+
+**Regeneration instructions (any machine, ~2h total):**
+1. Data: `python scripts/sample_dolmino.py 7100000000 out.pt` ->
+   `python scripts/shuffle_dolmino.py out.pt out_shuf.pt` (the OLMo-mix
+   cache regenerates via scripts/sample_olmomix.py + shuffle_cache.py).
+2. The bug-vs-fix probe: `torchrun --nproc_per_node=8
+   scripts/pretrain_tb_fast.py --steps 3815 --bs 32 --seq 2048 ... --rope-base {64,10000}`
+   (see scripts/ops/rope_probe.sh for the exact command).
+3. The full retrain (post-probe): the Phase-B command in
+   runs/phase-a-8xh100.md + `--rope-base 10000`.
+4. Eval: export via scripts/export_llama.py (both gates) ->
+   lm-eval 0.4.13 (the same-session protocol in this file).
+
+**Honest open question**: whether the rope fix alone closes the
+coherence gap, or the data recipe (SmolLM-style fineweb-edu/cosmopedia)
+and scale are also required — the probe answers the rope question at
+matched budget; the data experiment is specified and cheap.

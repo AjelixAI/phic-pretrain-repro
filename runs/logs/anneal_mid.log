@@ -1,0 +1,132 @@
+W0915 16:43:43.603000 204164 torch/distributed/run.py:792] 
+W0915 16:43:43.603000 204164 torch/distributed/run.py:792] *****************************************
+W0915 16:43:43.603000 204164 torch/distributed/run.py:792] Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
+W0915 16:43:43.603000 204164 torch/distributed/run.py:792] *****************************************
+wandb: [wandb.login()] Loaded credentials for https://api.wandb.ai from WANDB_API_KEY.
+wandb: Currently logged in as: excelpro (excelpro-excelpro) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: setting up run sxrhk51e
+wandb: Tracking run with wandb version 0.30.0
+wandb: Run data is saved locally in /root/phi/wandb/run-20260915_164351-sxrhk51e
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run tied-22L512d-b32-r64
+wandb: ⭐️ View project at https://wandb.ai/excelpro-excelpro/phic-midtrain
+wandb: 🚀 View run at https://wandb.ai/excelpro-excelpro/phic-midtrain/runs/sxrhk51e
+RESUMED weights from /root/phi/ckpt_tied-22L512d-b32-r64_step40000.pt
+P-form training path ON (154 TiedLinears)
+[tied-22L512d-b32-r64] params 55.9M | batches 1837
+[tied-22L512d-b32-r64] params 55.9M | batches 1837
+[tied-22L512d-b32-r64] params 55.9M | batches 1837
+[tied-22L512d-b32-r64] params 55.9M | batches 1837
+[tied-22L512d-b32-r64] params 55.9M | batches 1837
+[tied-22L512d-b32-r64] params 55.9M | batches 1837
+[tied-22L512d-b32-r64] params 55.9M | batches 1837
+[tied-22L512d-b32-r64] params 55.9M | batches 1837
+RESUME GATE: step-0 loss 4.257 vs recorded plateau ~4.125 -> PASS
+SANITY OK: step-0 loss 4.26
+[tied-22L512d-b32-r64] step     0 loss 4.2567 (107897 tok/s)
+[tied-22L512d-b32-r64] step    25 loss 4.1392 (941981 tok/s)
+[tied-22L512d-b32-r64] step    50 loss 4.1111 (1110127 tok/s)
+[tied-22L512d-b32-r64] step    75 loss 3.8771 (1182411 tok/s)
+[tied-22L512d-b32-r64] step   100 loss 3.9350 (1222692 tok/s)
+[tied-22L512d-b32-r64] step   125 loss 4.2887 (1248181 tok/s)
+[tied-22L512d-b32-r64] step   150 loss 3.8059 (1265691 tok/s)
+[tied-22L512d-b32-r64] step   175 loss 3.8306 (1278400 tok/s)
+[tied-22L512d-b32-r64] step   200 loss 3.8529 (1288207 tok/s)
+[tied-22L512d-b32-r64] step   225 loss 3.7319 (1295985 tok/s)
+[tied-22L512d-b32-r64] step   250 loss 3.8932 (1302278 tok/s)
+[tied-22L512d-b32-r64] step   275 loss 3.7336 (1307473 tok/s)
+[tied-22L512d-b32-r64] step   300 loss 3.8391 (1311815 tok/s)
+[tied-22L512d-b32-r64] step   325 loss 3.8183 (1315513 tok/s)
+[tied-22L512d-b32-r64] step   350 loss 3.8745 (1317128 tok/s)
+[tied-22L512d-b32-r64] step   375 loss 3.8323 (1320012 tok/s)
+[tied-22L512d-b32-r64] step   400 loss 3.6932 (1322570 tok/s)
+[tied-22L512d-b32-r64] step   425 loss 3.9226 (1324827 tok/s)
+[tied-22L512d-b32-r64] step   450 loss 3.8524 (1326835 tok/s)
+[tied-22L512d-b32-r64] step   475 loss 3.7854 (1328630 tok/s)
+[tied-22L512d-b32-r64] VAL 3.8571
+[tied-22L512d-b32-r64] step   500 loss 3.7239 (1329434 tok/s)
+[tied-22L512d-b32-r64] step   525 loss 3.8267 (1330956 tok/s)
+[tied-22L512d-b32-r64] step   550 loss 3.8478 (1332321 tok/s)
+[tied-22L512d-b32-r64] step   575 loss 4.0439 (1333589 tok/s)
+[tied-22L512d-b32-r64] step   600 loss 3.8011 (1334748 tok/s)
+[tied-22L512d-b32-r64] step   625 loss 3.7876 (1335808 tok/s)
+[tied-22L512d-b32-r64] step   650 loss 3.7691 (1336796 tok/s)
+[tied-22L512d-b32-r64] step   675 loss 3.9417 (1337717 tok/s)
+[tied-22L512d-b32-r64] step   700 loss 3.8541 (1337818 tok/s)
+[tied-22L512d-b32-r64] step   725 loss 3.7741 (1338629 tok/s)
+[tied-22L512d-b32-r64] step   750 loss 3.7340 (1339395 tok/s)
+[tied-22L512d-b32-r64] step   775 loss 3.7924 (1340110 tok/s)
+[tied-22L512d-b32-r64] step   800 loss 3.9129 (1340200 tok/s)
+[tied-22L512d-b32-r64] step   825 loss 3.7468 (1340796 tok/s)
+[tied-22L512d-b32-r64] step   850 loss 3.7112 (1341421 tok/s)
+[tied-22L512d-b32-r64] step   875 loss 3.8557 (1342012 tok/s)
+[tied-22L512d-b32-r64] step   900 loss 3.7707 (1342558 tok/s)
+[tied-22L512d-b32-r64] step   925 loss 4.0361 (1343067 tok/s)
+[tied-22L512d-b32-r64] step   950 loss 3.7680 (1343556 tok/s)
+[tied-22L512d-b32-r64] step   975 loss 3.6047 (1344023 tok/s)
+[tied-22L512d-b32-r64] VAL 3.8427
+[tied-22L512d-b32-r64] step  1000 loss 3.8013 (1344048 tok/s)
+[tied-22L512d-b32-r64] step  1025 loss 3.8729 (1344295 tok/s)
+[tied-22L512d-b32-r64] step  1050 loss 3.7126 (1344707 tok/s)
+[tied-22L512d-b32-r64] step  1075 loss 3.7531 (1345108 tok/s)
+[tied-22L512d-b32-r64] step  1100 loss 3.7827 (1345495 tok/s)
+[tied-22L512d-b32-r64] step  1125 loss 3.6683 (1345858 tok/s)
+[tied-22L512d-b32-r64] step  1150 loss 3.7665 (1346206 tok/s)
+[tied-22L512d-b32-r64] step  1175 loss 3.7303 (1346539 tok/s)
+[tied-22L512d-b32-r64] step  1200 loss 3.7730 (1346861 tok/s)
+[tied-22L512d-b32-r64] step  1225 loss 3.9020 (1347166 tok/s)
+[tied-22L512d-b32-r64] step  1250 loss 3.8264 (1347462 tok/s)
+[tied-22L512d-b32-r64] step  1275 loss 3.4711 (1347391 tok/s)
+[tied-22L512d-b32-r64] step  1300 loss 3.8169 (1347678 tok/s)
+[tied-22L512d-b32-r64] step  1325 loss 3.7608 (1347955 tok/s)
+[tied-22L512d-b32-r64] step  1350 loss 3.8247 (1348219 tok/s)
+[tied-22L512d-b32-r64] step  1375 loss 3.8209 (1348471 tok/s)
+[tied-22L512d-b32-r64] step  1400 loss 3.9173 (1348718 tok/s)
+[tied-22L512d-b32-r64] step  1425 loss 3.8674 (1348959 tok/s)
+[tied-22L512d-b32-r64] step  1450 loss 3.7891 (1349192 tok/s)
+[tied-22L512d-b32-r64] step  1475 loss 3.9101 (1349414 tok/s)
+[tied-22L512d-b32-r64] VAL 3.8386
+[tied-22L512d-b32-r64] step  1500 loss 3.6682 (1349345 tok/s)
+[tied-22L512d-b32-r64] step  1525 loss 3.7962 (1349562 tok/s)
+[tied-22L512d-b32-r64] step  1550 loss 3.9237 (1349763 tok/s)
+[tied-22L512d-b32-r64] step  1575 loss 3.7472 (1349960 tok/s)
+[tied-22L512d-b32-r64] step  1600 loss 3.8039 (1349763 tok/s)
+[tied-22L512d-b32-r64] step  1625 loss 3.6420 (1349957 tok/s)
+[tied-22L512d-b32-r64] step  1650 loss 3.8068 (1350139 tok/s)
+[tied-22L512d-b32-r64] step  1675 loss 3.7454 (1350322 tok/s)
+[tied-22L512d-b32-r64] step  1700 loss 3.7218 (1350494 tok/s)
+[tied-22L512d-b32-r64] step  1725 loss 3.7156 (1350317 tok/s)
+[tied-22L512d-b32-r64] step  1750 loss 3.8394 (1350489 tok/s)
+[tied-22L512d-b32-r64] step  1775 loss 3.7873 (1350651 tok/s)
+[tied-22L512d-b32-r64] step  1800 loss 3.8179 (1350813 tok/s)
+[tied-22L512d-b32-r64] step  1825 loss 3.7619 (1350973 tok/s)
+[tied-22L512d-b32-r64] DONE
+[tied-22L512d-b32-r64] DONE[tied-22L512d-b32-r64] DONE[tied-22L512d-b32-r64] DONE
+
+
+[tied-22L512d-b32-r64] DONE
+[tied-22L512d-b32-r64] DONE
+[tied-22L512d-b32-r64] DONE
+[tied-22L512d-b32-r64] VAL 3.8398
+[tied-22L512d-b32-r64] DONE
+wandb: updating run metadata
+wandb: uploading output.log; uploading wandb-summary.json; uploading config.yaml
+wandb: uploading config.yaml
+wandb: 
+wandb: Run history:
+wandb:  train/loss █▆▄▄█▃▄▂▄▃▄▄▃▃▅▄▄▂▃▄▅▃▁▃▄▂▃▂▃▄▃▂▃▄▂▁▂▂▃▃
+wandb:    train/lr ▁███████████████████████████████████████
+wandb: train/tok_s ▁▆▇▇▇███████████████████████████████████
+wandb:    val/loss █▃▁▁
+wandb: 
+wandb: Run summary:
+wandb:  train/loss 3.76186
+wandb:    train/lr 0.0001
+wandb: train/tok_s 1350973.38984
+wandb:    val/loss 3.83978
+wandb: 
+wandb: 🚀 View run tied-22L512d-b32-r64 at: https://wandb.ai/excelpro-excelpro/phic-midtrain/runs/sxrhk51e
+wandb: ⭐️ View project at: https://wandb.ai/excelpro-excelpro/phic-midtrain
+wandb: Synced 5 W&B file(s), 0 media file(s), 0 artifact file(s) and 0 other file(s)
+wandb: Find logs at: ./wandb/run-20260915_164351-sxrhk51e/logs
+[rank0]:[W915 16:55:56.226357325 ProcessGroupNCCL.cpp:1496] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())

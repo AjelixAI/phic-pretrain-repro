@@ -1,0 +1,24 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+config order: ['flan', 'stackexchange', 'wiki', 'math', 'pes2o', 'dclm']
+flan: 209 files, picking 33, target 568M tok
+  flan: 579M tok (100.0%), cumulative 0.58B
+stackexchange: 16 files, picking 2, target 284M tok
+  stackexchange: 179M tok (23.7%), cumulative 0.76B
+wiki: 2 files, picking 2, target 568M tok
+  wiki: 520M tok (40.7%), cumulative 1.28B
+math: 5129 files, picking 138, target 284M tok
+  math: 179M tok (12.3%), cumulative 1.46B
+pes2o: 26 files, picking 2, target 568M tok
+  pes2o: 476M tok (24.6%), cumulative 1.93B
+dclm: 1970 files, picking 13, target 4828M tok
+  dclm: 4358M tok (69.3%), cumulative 6.29B
+total tokens: 6290794877
+GATE EOS: 7421819 EOS == 7421811 docs -> FAIL
+GATE id-range: max id 50276 < 50304 -> PASS
+GATE proportion flan: 579M tok = 0.579B (8.1%)
+GATE proportion stackexchange: 179M tok = 0.179B (2.5%)
+GATE proportion wiki: 520M tok = 0.520B (7.3%)
+GATE proportion math: 179M tok = 0.179B (2.5%)
+GATE proportion pes2o: 476M tok = 0.476B (6.7%)
+GATE proportion dclm: 4358M tok = 4.358B (61.4%)
+saved /root/phi/data_cache_dolmino_7B_raw.pt

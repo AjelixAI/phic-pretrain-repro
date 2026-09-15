@@ -1,0 +1,5 @@
+docs: 7421819 == EOS count 7421819
+saved /root/phi/data_cache_dolmino_7B_shuf.pt: 6.291B tokens
+first 20 shuffled doc lengths: [511, 1411, 1338, 90, 311, 74, 384, 4967, 429, 84, 891, 120, 731, 1814, 767, 2203, 238, 859, 963, 1430]
+longest similar-length run: raw 9902 -> shuffled 23 (global shuffle expected: near log(n)/log(3))
+doc length median 413, p90 1704
