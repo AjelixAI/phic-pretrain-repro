@@ -365,14 +365,15 @@ def main():
         del sd
         if RANK == 0:
             print(f"RESUMED weights from {A.init_from}", flush=True)
+    ck_opt = None
     if A.resume:
         ck = torch.load(A.resume, map_location="cpu", weights_only=False)
         model.load_state_dict(ck["model"], strict=True)
-        opt.load_state_dict(ck["opt"])
+        ck_opt = ck["opt"]
         A._start_step = ck["step"]
         del ck
         if RANK == 0:
-            print(f"FULL RESUME from {A.resume} @step {ck['step'] if False else A._start_step}",
+            print(f"FULL RESUME from {A.resume} @step {A._start_step}",
                   flush=True)
     if not A.no_ptied:
         from ptied_train import enable_ptied
@@ -391,7 +392,12 @@ def main():
         _raw = model
     print(f"[{tag}] params {npar/1e6:.1f}M | batches {nb}", flush=True)
     opt = torch.optim.AdamW(model.parameters(), lr=A.lr, weight_decay=0.1,
-                            betas=(0.9, 0.95))
+                            betas=(0.9, 0.95), fused=True, capturable=True)
+    if ck_opt is not None:
+        opt.load_state_dict(ck_opt)
+        del ck_opt
+        if RANK == 0:
+            print("optimizer state restored", flush=True)
 
     def lr_at(s):
         if s < A.warmup:
