@@ -111,6 +111,22 @@ def shuffle_pass(raw_path, shuf_path):
             out.write(mm[starts[i]:ends[i]].tobytes())
             w += lens[i]
     out.close()
+    # MIXING GATE: the longest similar-length doc run must match the random
+    # expectation (the Phase-B standing warning: source-blocked cache = invalid)
+    def longest_similar_run(seq):
+        best = run = 1
+        for a, b in zip(seq, seq[1:]):
+            run = run + 1 if b <= 2 * max(a, 1) else 1
+            best = max(best, run)
+        return best
+    lshuf = [int(lens[i]) for i in perm]
+    shuf_run = longest_similar_run(lshuf)
+    raw_run = longest_similar_run([int(x) for x in lens])
+    ok = shuf_run <= 4 * max(21, raw_run // 10)
+    print(f"  MIXING GATE: longest similar-length run raw {raw_run} -> "
+          f"shuffled {shuf_run} -> {'PASS' if ok else 'FAIL'}", flush=True)
+    if not ok:
+        raise SystemExit("SHUFFLE FAILED THE MIXING GATE - source blocks survived")
     print(f"  shuffled {docs_n} docs, {w/1e9:.2f}B tokens", flush=True)
     return docs_n, total
 
