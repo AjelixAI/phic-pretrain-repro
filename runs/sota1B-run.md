@@ -49,3 +49,14 @@
 6. The stale numbers propagate silently (the config_math's 50k-vocab 975.4M vs the true 1,095M with the 100k vocab) — re-verify after every change.
 7. The checkpoint system: the full (weights+optimizer+step), the rotation, the resume — tested with an actual kill.
 8. The dataset builder: the streaming design (the bounded RAM), the per-config truncation, the mixing gate.
+
+## The in-flight checkpoint verification (step 14,000, the run untouched)
+
+| check | result |
+|---|---|
+| the checkpoint load | missing 0 / unexpected 0 — the state dict intact |
+| val generic (the eval-side recompute) | 4.3734 nats/token — matches the training's logged val ✓ |
+| the generations | fluent early-stage English; the high-frequency loops = the expected base-model behavior at ~3B tokens |
+| the training | untouched: the eval ran read-only on the milestone, the spare GPU memory, the ~1 min |
+
+**The lesson**: the false-alarm garbage generation was the EVAL's wrong tokenizer — the trainer's script loaded `EleutherAI/gpt-neox-20b` (the 130M FineWeb-era leftover) while the data is tokenized with `allenai/OLMo-2-1124-7B` (the OLMo 2, the same 100,352 vocab size, the different token mappings). The same-size vocab made the mismatch silent: the ids are valid in both mappings, the decode is nonsense. The eval scripts MUST use the DATA's tokenizer. The trainer's tokenizer line is now documented as a decoy: the training never touches it (the ids come from the cache), but any encode/decode work must use the OLMo 2 map.
