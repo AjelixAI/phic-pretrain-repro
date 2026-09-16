@@ -349,8 +349,8 @@ def main():
     if os.path.exists(CACHE):
         try:
             flat = torch.load(CACHE, weights_only=True, mmap=True)
-        except RuntimeError:
-            flat = torch.load(CACHE, weights_only=True)  # the numpy-backed storage: the full RAM load
+        except Exception:
+            flat = torch.load(CACHE, weights_only=False)  # our cache: the numpy-backed storage (trusted)
             if RANK == 0:
                 print("cache loaded without mmap (the numpy-backed format)", flush=True)
     else:
