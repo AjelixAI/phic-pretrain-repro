@@ -60,3 +60,19 @@
 | the training | untouched: the eval ran read-only on the milestone, the spare GPU memory, the ~1 min |
 
 **The lesson**: the false-alarm garbage generation was the EVAL's wrong tokenizer — the trainer's script loaded `EleutherAI/gpt-neox-20b` (the 130M FineWeb-era leftover) while the data is tokenized with `allenai/OLMo-2-1124-7B` (the OLMo 2, the same 100,352 vocab size, the different token mappings). The same-size vocab made the mismatch silent: the ids are valid in both mappings, the decode is nonsense. The eval scripts MUST use the DATA's tokenizer. The trainer's tokenizer line is now documented as a decoy: the training never touches it (the ids come from the cache), but any encode/decode work must use the OLMo 2 map.
+
+## The in-flight benchmark sweep (step 14,000, ~2.75B tokens)
+
+| benchmark | acc | chance | note |
+|---|---|---|---|
+| ARC-Easy | 0.290 | 0.25 | the knowledge tasks: the data-limited at this stage |
+| HellaSwag | 0.302 | 0.25 | the adversarial completions: the mid-training skill |
+| PIQA | 0.499 | 0.50 | the MC discrimination: not yet developed; both prompt formats tested |
+| LAMBADA | 0.027 | ~0.001 | the exact-word prediction: weak now, climbs sharply mid-run |
+
+**The eval bugs found and fixed (the user's challenge: "maybe the eval is wrong?")**:
+1. **The answer-key bug**: the first harness scored ARC/HellaSwag assuming the gold = the index 0 — the ARC's gold is the `answerKey` ('A'/'B'/...), the HellaSwag's is `label`. The first numbers measured the position bias, not the accuracy. Fixed in `scripts/ops/eval_benchmarks2.py`.
+2. **The PIQA format test**: the raw and Q/A-wrapped formats both at the chance → the model's genuine early-stage behavior, not the format sensitivity.
+3. **The LAMBADA method** (the argmax == the target's first token): verified correct; 0.027 is the plausible at 2.75B tokens (the Pythia-160M's matched-stage reference: ~0.03-0.05).
+
+**The lesson**: the uncorrected MC "accuracy" is silently the choice-order preference — the gold key must come from the dataset's field. The reference for the in-flight benchmarks = the Pythia's checkpoints at the SAME data step, never their 300B-token finals. Re-check this suite at ~30B tokens to watch the skills develop; the val loss stays the primary signal.
