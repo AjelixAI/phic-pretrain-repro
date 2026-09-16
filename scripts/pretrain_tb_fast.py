@@ -347,7 +347,12 @@ def main():
     # data: pre-tokenized cache (built once, loaded by all ranks)
     CACHE = A.cache
     if os.path.exists(CACHE):
-        flat = torch.load(CACHE, weights_only=True, mmap=True)  # 1-D int32 stream (mmapped: shared across ranks)
+        try:
+            flat = torch.load(CACHE, weights_only=True, mmap=True)
+        except RuntimeError:
+            flat = torch.load(CACHE, weights_only=True)  # the numpy-backed storage: the full RAM load
+            if RANK == 0:
+                print("cache loaded without mmap (the numpy-backed format)", flush=True)
     else:
         flat = data_stream(A.steps, A.bs, A.seq).reshape(-1)
         torch.save(flat, CACHE)
