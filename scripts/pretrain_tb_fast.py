@@ -384,6 +384,8 @@ def main():
             print(f"P-form training path ON ({n_swapped} TiedLinears)",
                   flush=True)
     if A.compile:
+        import torch._dynamo as _dynamo_mod
+        _dynamo_mod.config.allow_unspec_int_on_nn_module = True
         model = torch.compile(model, mode=os.environ.get("TCOMPILE_MODE", "default"))
     _graph_mode = getattr(A, "graphs", False)
     npar = sum(p.numel() for p in model.parameters())
