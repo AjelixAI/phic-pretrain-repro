@@ -494,7 +494,7 @@ def main():
                        "train/tok_s": tps}, step=step)
             print(f"[{tag}] step {step:5d} loss {loss.item():.4f} "
                   f"({tps:.0f} tok/s)", flush=True)
-        if (step + 1) % 500 == 0 or step == A.steps - 1:
+        if (step + 1) % 500 == 0 or (step + 1 - _start) % A.save_every == 0 or step == A.steps - 1:
             # held-out: --val-file (the held-out generic slice, disjoint from
             # the train cache by construction) or the cache tail as the proxy
             model.eval()
