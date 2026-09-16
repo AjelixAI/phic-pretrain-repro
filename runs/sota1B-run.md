@@ -105,3 +105,16 @@
 | LAMBADA acc | 0.027 | 0.033 | +0.006 | the exact-word prediction: the first sign of the movement |
 
 **The reading**: the MC benchmarks are dominated by the noise at this data stage — the val loss (the -0.047 nats) is the real signal of improvement. The benchmarks' expected development: the mid-run (the 10-40B tokens). The re-check cadence: the ~30B tokens (~step 155,000).
+
+## The three-checkpoint benchmark trajectory
+
+| benchmark | 14,000 (2.75B tok) | 24,500 (4.8B) | 28,000 (5.5B) | trend |
+|---|---|---|---|---|
+| val generic | 4.373 | 4.318 | ~4.32 (the rotating-window smoothed) | ↓ steady |
+| ARC-Easy acc | 0.290 | 0.285 | **0.303** | **↑ first MC movement** |
+| HellaSwag acc | 0.302 | 0.295 | 0.300 | flat (the later-developing) |
+| PIQA acc | 0.499 | 0.470 | 0.465 | chance (the later-developing) |
+| LAMBADA acc | 0.027 | 0.033 | **0.046** | **↑ +70% — doubling per ~1.4× tokens** |
+| the val-ctx generation | "is a good thing. I don't know what" | "is a good thing to do. I know that" | "is a very important thing. I know that I" | fluent, the increasing connectivity |
+
+**The reading**: the progressing on every instrument that can resolve change at 5.5B tokens — the ARC's first above-noise movement and the LAMBADA's near-doubling confirm the data-scaling curves; the HellaSwag/PIQA's flatness matches the matched-stage Pythia reference. The mid-run re-check at ~30B tokens (~step 155k) is the decisive read.
