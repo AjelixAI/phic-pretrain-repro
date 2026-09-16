@@ -76,3 +76,20 @@
 3. **The LAMBADA method** (the argmax == the target's first token): verified correct; 0.027 is the plausible at 2.75B tokens (the Pythia-160M's matched-stage reference: ~0.03-0.05).
 
 **The lesson**: the uncorrected MC "accuracy" is silently the choice-order preference — the gold key must come from the dataset's field. The reference for the in-flight benchmarks = the Pythia's checkpoints at the SAME data step, never their 300B-token finals. Re-check this suite at ~30B tokens to watch the skills develop; the val loss stays the primary signal.
+
+## The throughput-lever sweep (step ~16,300, the run untouched; contended GPU-3 measurements)
+
+| config | ms/step | tok/s/GPU | vs baseline |
+|---|---|---|---|
+| bs 12, ckpt-all (the running config) | 3,942 | 12,468 | — |
+| bs 12, ckpt-every-2 | 3,563 | 13,797 | +11% |
+| bs 12, **ckpt-every-4** | **3,420** | **14,372** | **+15%** |
+| bs 16, ckpt-every-2 | 4,684 | 13,990 | +12% |
+| bs 24, any | OOM | — | needs an uncontended 96GB GPU |
+| bs 12, no-ckpt | OOM | — | needs ~70GB; misses by ~200MB when contended |
+
+**The step's wall-time breakdown (the profile)**: the backward ~79% (of which ~60% is the checkpointing's activation recompute), the forward ~25%, the FP8 P-rebuild **~4%** (the earlier "50-70% of the step" was FLOPs-normalized, not wall-time — the FP8-build made it cheap), the optimizer ~1%.
+
+**The trainer patch (committed)**: `ckpt_every` — the checkpoint only every Nth layer (the Block stores the layer_idx; the ckpt_every=1 = the old behavior). The run #2's config: **bs 24 + ckpt-every-4 on an uncontended GPU: the projected ~1.4-1.5× (the ~120-130K tok/s aggregate)**, with the FP8-x@P + the CUDA-graphs as the next ~1.2-1.3× (the graphs' 1B gate: the 27.8% divergence: the debug data saved).
+
+**The honest 10× verdict**: the theoretical FLOP ceiling on the 4×RTX = the ~280K tok/s (the 3.2× today). The ~10× needs the hardware scale or the optical engine.
