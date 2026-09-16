@@ -9,7 +9,8 @@ tok = AutoTokenizer.from_pretrained("allenai/OLMo-2-1124-7B")
 cfg = NS(mode='tied', d=2048, ffn=7168, layers=16, block=32, rank=64, stages=2,
          vocab=100352, seq=4096, rope_base=10000.0, chunked_ce=0)
 m = LM(cfg)
-sd = torch.load('/root/phi/ckpt_tied-16L2048d-b32-r64-sota1B_mile_14000.pt', map_location='cpu', weights_only=True)
+CKPT = sys.argv[1] if len(sys.argv) > 1 else '/root/phi/ckpt_tied-16L2048d-b32-r64-sota1B_mile_14000.pt'
+sd = torch.load(CKPT, map_location='cpu', weights_only=True)
 m.load_state_dict(sd.get('model', sd), strict=False); m.to(DEV).eval()
 print(f"loaded step {sd.get('step','?')}", flush=True)
 

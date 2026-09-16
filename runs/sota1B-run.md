@@ -93,3 +93,15 @@
 **The trainer patch (committed)**: `ckpt_every` — the checkpoint only every Nth layer (the Block stores the layer_idx; the ckpt_every=1 = the old behavior). The run #2's config: **bs 24 + ckpt-every-4 on an uncontended GPU: the projected ~1.4-1.5× (the ~120-130K tok/s aggregate)**, with the FP8-x@P + the CUDA-graphs as the next ~1.2-1.3× (the graphs' 1B gate: the 27.8% divergence: the debug data saved).
 
 **The honest 10× verdict**: the theoretical FLOP ceiling on the 4×RTX = the ~280K tok/s (the 3.2× today). The ~10× needs the hardware scale or the optical engine.
+
+## The checkpoint-over-checkpoint benchmark comparison (the step 14,000 -> 24,500, +1.38B tokens)
+
+| benchmark | step 14,000 | step 24,500 | delta | interpretation |
+|---|---|---|---|---|
+| val generic (the run's own val) | 4.373 | **4.326** (the step 24,000's val) | -0.047 | the steady WSD's descent ✓ |
+| ARC-Easy acc | 0.290 | 0.285 | ~flat | the knowledge tasks: the data-limited: the noise-dominated at this stage |
+| HellaSwag acc | 0.302 | 0.295 | ~flat | the same: the MC discrimination develops later |
+| PIQA acc (n=200) | 0.499 | 0.470 | ~flat | the chance-level: the expected |
+| LAMBADA acc | 0.027 | 0.033 | +0.006 | the exact-word prediction: the first sign of the movement |
+
+**The reading**: the MC benchmarks are dominated by the noise at this data stage — the val loss (the -0.047 nats) is the real signal of improvement. The benchmarks' expected development: the mid-run (the 10-40B tokens). The re-check cadence: the ~30B tokens (~step 155,000).
