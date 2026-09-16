@@ -350,9 +350,10 @@ def main():
         try:
             flat = torch.load(CACHE, weights_only=True, mmap=True)
         except Exception:
-            flat = torch.load(CACHE, weights_only=False)  # our cache: the numpy-backed storage (trusted)
+            # the SOTA build's cache: the RAW int32 memmap (the zero-copy)
+            flat = torch.from_numpy(np.memmap(CACHE, dtype=np.int32, mode='r'))
             if RANK == 0:
-                print("cache loaded without mmap (the numpy-backed format)", flush=True)
+                print("cache loaded as the raw int32 memmap (the zero-copy)", flush=True)
     else:
         flat = data_stream(A.steps, A.bs, A.seq).reshape(-1)
         torch.save(flat, CACHE)
