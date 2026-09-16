@@ -417,7 +417,7 @@ def main():
         if s < A.decay_start:
             return 1.0
         frac = (s - A.decay_start) / max(A.steps - A.decay_start, 1)
-        return max(0.02, 1.0 - frac)
+        return max(0.0, 1.0 - frac)   # linear decay-to-zero (arXiv 2502.15938: D2Z beats 10%-decay; the benefit grows with TPP)
     model.train()
     _graph = None
     xb_s = torch.zeros(A.bs, A.seq, dtype=torch.long, device=DEV)
