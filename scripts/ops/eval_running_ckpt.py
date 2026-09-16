@@ -1,8 +1,8 @@
-import torch, math
+import torch, math, sys
 from types import SimpleNamespace as NS
 import sys; sys.path.insert(0, '/root/phi')
 from pretrain_tb_fast import LM
-CKPT='/root/phi/ckpt_tied-16L2048d-b32-r64-sota1B_mile_14000.pt'
+CKPT = sys.argv[1] if len(sys.argv) > 1 else '/root/phi/ckpt_tied-16L2048d-b32-r64-sota1B_mile_14000.pt'
 DEV='cuda:3'
 cfg = NS(mode='tied', d=2048, ffn=7168, layers=16, block=32, rank=64, stages=2,
          vocab=100352, seq=4096, rope_base=10000.0, chunked_ce=0)
