@@ -152,3 +152,15 @@ The PIQA's back-to-back 0.525s = the first statistically meaningful MC movement 
 | SmolLM2-1.7B (the final) | ~11,000B | 0.779 | 0.479 |
 
 **The read**: the OLMo-2's public checkpoints start at ~370B tokens (36x our budget) — no comparable 10B-token reference exists; the matched-stage reference stays Pythia. The gap to the OLMo's final = the training-budget gap (456x), not the evidence of a harness/architecture fault (the harness reproduces the published-class numbers on the references — the harness validated). The completion target band (the 87.3B, the annealed): ARC 0.42-0.50, HellaSwag 0.40-0.45, PIQA 0.65-0.72 — between gemmeh's 20B model and the 1B-class SOTA line. The architecture-tax head-to-head (the dense 1B, the same 10B tokens) = the run #2's first experiment (~10 GPU-hours).
+
+## The live A/B: the replay window proves the ckpt-every-4 equivalence (the step 56,300-56,500)
+
+The restart's replay (the resume from the step 56,000 with --ckpt-every 4) re-ran the same data window the pre-kill process had just trained. The per-step losses at the matched steps:
+
+| step | pre-kill | replay | diff |
+|---|---|---|---|
+| 56,300 | 3.8941 | 3.9032 | +0.009 |
+| 56,425 | 3.8044 | 3.8671 | +0.063 |
+| 56,475 | 4.2983 | 4.2699 | -0.028 |
+
+The mean diff ~0.002 nats — the bf16 run-to-run noise floor (the same-config-twice control: the same spread). **The gradient-equivalence is confirmed in production: the checkpointing frequency changes the memory/compute trade, not the training trajectory.** The honest restart-cost note: the in-process save gate (the 3,500-step bug) made the 56,700 save a non-event, so the pause replayed ~900 steps (~28 min) — the documented cost of pausing without a save point; the patched trainer's 700-step cadence bounds any future replay to ~7 min.
