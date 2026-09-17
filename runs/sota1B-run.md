@@ -142,3 +142,13 @@ The 42,000's read: the val-ctx generation stays fluent; the PIQA's 0.525 = the f
 | the val-ctx generation | "is a very important question to the topic. The" | the fluent, the increasingly topical |
 
 The PIQA's back-to-back 0.525s = the first statistically meaningful MC movement of the run. The projection: the PIQA ~0.65-0.72 at the 87.3B completion holds intact.
+
+## The reference-model comparison (the same harness, run on the actual reference checkpoints)
+
+| model | training tokens | ARC-Easy | HellaSwag |
+|---|---|---|---|
+| ours (1.08B dense-equiv, 10.3B tok) | 10.3B | 0.286 | 0.301 |
+| OLMo-2-0425-1B (the final) | ~4,700B | 0.726 | 0.472 |
+| SmolLM2-1.7B (the final) | ~11,000B | 0.779 | 0.479 |
+
+**The read**: the OLMo-2's public checkpoints start at ~370B tokens (36x our budget) — no comparable 10B-token reference exists; the matched-stage reference stays Pythia. The gap to the OLMo's final = the training-budget gap (456x), not the evidence of a harness/architecture fault (the harness reproduces the published-class numbers on the references — the harness validated). The completion target band (the 87.3B, the annealed): ARC 0.42-0.50, HellaSwag 0.40-0.45, PIQA 0.65-0.72 — between gemmeh's 20B model and the 1B-class SOTA line. The architecture-tax head-to-head (the dense 1B, the same 10B tokens) = the run #2's first experiment (~10 GPU-hours).
