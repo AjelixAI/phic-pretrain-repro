@@ -40,6 +40,8 @@ def parse():
     p.add_argument("--compile", action="store_true")
     p.add_argument("--chunked-ce", type=int, default=0,
                    help="rows per CE chunk; 0 = materialized logits (old path)")
+    p.add_argument("--ckpt-every", type=int, default=1,
+                   help="checkpoint every Nth layer (1=all, 4=~15-25%% faster, math identical)")
     p.add_argument("--no-ckpt", action="store_true",
                    help="disable activation checkpointing (fits now with fast path)")
     p.add_argument("--init-from", default=None,
