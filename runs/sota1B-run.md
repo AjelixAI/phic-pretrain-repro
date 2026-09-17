@@ -200,3 +200,17 @@ Failures on the way (all caught by the verification loop, zero training loss):
 Result: ~144K tok/s measured clean (+24.2% vs the 116K post-600W baseline),
 94.3 GB VRAM, GPUs 100%/~550W/2,370 MHz. Remaining ~263k steps ~ 6.8 days.
 Watchdog updated: bs16/config now its auto-restart defaults.
+
+## WikiText-103 PPL instrument added (2026-09-17 evening)
+150k-token fixed slice of the wikitext-103 test set, OLMo tokenizer, greedy
+1024-token windows. Sweep across the local milestones:
+  mile 56000: PPL 141.98 (CE 4.9557)
+  mile 61600: PPL 138.75 (CE 4.9327)
+  mile 65100: PPL 132.05 (CE 4.8832)
+  mile 67900: PPL 129.09 (CE 4.8605)
+Monotone improvement, ~-1.6% PPL per 2,100 steps through the plateau - the
+continuous evidence that the model keeps learning while MC benchmarks look
+flat (their movement is sub-linear in loss and below their noise floor).
+Script: /tmp/ppl_sweep.py (B=1, chunked CE - GPU7 has ~5GB free).
+Benchmark series extended: 67,900 -> ARC-Easy 0.304, HellaSwag 0.302,
+LAMBADA 0.051 (LAMBADA is the only MC benchmark still visibly climbing).
