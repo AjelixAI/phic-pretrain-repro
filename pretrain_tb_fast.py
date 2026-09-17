@@ -420,6 +420,11 @@ def main():
     if ck_opt is not None:
         opt.load_state_dict(ck_opt)
         del ck_opt
+        if _graph_mode:
+            # load_state_dict restores the ckpt's param_groups (capturable=False
+            # from the eager era) -> re-assert graph mode on the live groups
+            for gparam in opt.param_groups:
+                gparam["capturable"] = True
         if RANK == 0:
             print("optimizer state restored", flush=True)
 

@@ -180,3 +180,23 @@ Measured: 100 steps in 169 s = 116.3K tok/s vs the ~101K baseline = +15.2%,
 at ~585W sustained, SM clocks 2347-2370 of 2430. Zero-risk lever found by
 checking the power ceiling; the "thermal envelope" theory of the MFU gap was
 wrong - it was a power-cap misconfiguration.
+
+## bs16 restart executed (2026-09-17 15:26)
+Killed bs12 at the step-62,300 save (no token waste), relaunched bs 16 x 4 eager
+resuming from it. Token budget preserved: steps 434,080 -> 325,560 (x0.75),
+decay-start 317,925 - same 85.3B-token schedule shape.
+
+Failures on the way (all caught by the verification loop, zero training loss):
+1. wandb init failed: relaunch script lacked `source /root/.wandb_local` (fixed,
+   watchdog updated to the new config too, incl. the DONE gate at 325,559).
+2. capturable restore bug: opt.load_state_dict() restores the ckpt's param_groups
+   (capturable=False from the eager era) -> graph capture of AdamW step() failed.
+   Fixed by re-asserting capturable=True after load when _graph_mode.
+3. bs16 + CUDA graphs = OOM: the captured backward graph holds 85.4 GB of
+   activations in private pools; bs16's step doesn't fit in 96 GB. Verdict:
+   graphs stay banked for the H200/B200 continuation (192 GB class); this rig
+   runs bs16 eager.
+
+Result: ~144K tok/s measured clean (+24.2% vs the 116K post-600W baseline),
+94.3 GB VRAM, GPUs 100%/~550W/2,370 MHz. Remaining ~263k steps ~ 6.8 days.
+Watchdog updated: bs16/config now its auto-restart defaults.
