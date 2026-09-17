@@ -400,13 +400,19 @@ def main():
         model = torch.compile(model, mode=os.environ.get("TCOMPILE_MODE", "default"))
     _graph_mode = getattr(A, "graphs", False)
     npar = sum(p.numel() for p in model.parameters())
-    if WORLD > 1:
+    if WORLD > 1 and not _graph_mode:
         from torch.nn.parallel import DistributedDataParallel as DDP
-        model = DDP(model, device_ids=[RANK % WORLD],
-                    static_graph=_graph_mode)
+        model = DDP(model, device_ids=[RANK % WORLD])
         _raw = model.module
     else:
         _raw = model
+        if WORLD > 1:
+            # graph mode: no DDP (its post-accumulate-grad hooks fire on the
+            # raw model's backward and break CUDA-graph capture) -> manual
+            # allreduce; one-time broadcast keeps fresh-init ranks identical
+            for _t in list(model.parameters()) + list(model.buffers()):
+                torch.distributed.broadcast(_t, src=0)
+            torch.distributed.barrier()
     print(f"[{tag}] params {npar/1e6:.1f}M | batches {nb}", flush=True)
     opt = torch.optim.AdamW(model.parameters(), lr=A.lr, weight_decay=0.1,
                             betas=(0.9, 0.95), fused=True,
@@ -425,7 +431,9 @@ def main():
         frac = (s - A.decay_start) / max(A.steps - A.decay_start, 1)
         return max(0.0, 1.0 - frac)   # linear decay-to-zero (arXiv 2502.15938: D2Z beats 10%-decay; the benefit grows with TPP)
     model.train()
-    _graph = None
+    _graph_bw = None
+    _graph_opt = None
+    _warm = torch.cuda.Stream() if _graph_mode else None   # the official capture recipe: ALL pre-capture work on a side stream
     xb_s = torch.zeros(A.bs, A.seq, dtype=torch.long, device=DEV)
     loss_s = torch.zeros((), device=DEV)
     opt_lr = torch.tensor(A.lr, device=DEV)
@@ -446,24 +454,57 @@ def main():
         else:
             for gparam in opt.param_groups:
                 gparam["lr"] = lr
-        if hasattr(torch.compiler, "cudagraph_mark_step_begin"):
+        if A.compile and hasattr(torch.compiler, "cudagraph_mark_step_begin"):
             torch.compiler.cudagraph_mark_step_begin()
         if _graph_mode and step - _start == 3:
-            _graph = torch.cuda.CUDAGraph()
+            if _warm is not None:
+                torch.cuda.current_stream().wait_stream(_warm)
+            torch.cuda.synchronize()
+            torch.cuda.empty_cache()
             xb_s.copy_(xb)
-            with torch.cuda.graph(_graph):
-                _, loss_s = model(xb_s, labels=xb_s)
+            # PARTIAL GRAPHS: capture (fwd+bwd) on the RAW module (no DDP
+            # hooks -> no NCCL all-reduce inside the capture, which fails
+            # with 'operation not permitted when stream is capturing') and
+            # (opt.step) separately; the gradient all-reduce stays EAGER
+            # between the two replays (57 MB of trainable corrections).
+            _graph_bw = torch.cuda.CUDAGraph()
+            with torch.cuda.graph(_graph_bw):
+                _, loss_s = _raw(xb_s, labels=xb_s)
                 loss_s.backward()
+            _graph_opt = torch.cuda.CUDAGraph()
+            with torch.cuda.graph(_graph_opt):
                 opt.step()
                 opt.zero_grad(set_to_none=False)
             if RANK == 0:
-                print(f"[{tag}] CUDA graph captured at step {step}", flush=True)
+                print(f"[{tag}] CUDA graphs captured (bw+opt) at step {step}", flush=True)
         if _graph_mode and step - _start > 3:
+            if step - _start == 4:
+                # the eager step-3 left DDP-reduced grads in .grad; the captured
+                # backward ACCUMULATES -> erase once or the first replay
+                # double-counts step 3's gradient
+                opt.zero_grad(set_to_none=False)
             xb_s.copy_(xb)
-            _graph.replay()
+            _graph_bw.replay()
+            if WORLD > 1:
+                grads = [p.grad for p in _raw.parameters() if p.grad is not None]
+                _flat = torch._utils._flatten_dense_tensors(grads)
+                torch.distributed.all_reduce(_flat)
+                _flat.div_(WORLD)
+                for g, f in zip(grads, torch._utils._unflatten_dense_tensors(_flat, grads)):
+                    g.copy_(f)
+            # the eager path clips AFTER the all-reduce -> replicate exactly
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            _graph_opt.replay()
             loss = loss_s
         else:
-            _, loss = model(xb, labels=xb)
+            _m = _raw if _warm is not None else model   # graph mode: no DDP wrapper (no hooks, no NCCL inside capture history)
+            if _warm is not None:
+                _warm.wait_stream(torch.cuda.current_stream())
+                with torch.cuda.stream(_warm):
+                    _, loss = _m(xb, labels=xb)
+                torch.cuda.current_stream().wait_stream(_warm)
+            else:
+                _, loss = _m(xb, labels=xb)
         if os.environ.get("COMPILED_AUTOGRAD"):
             loss = loss.clone()   # detach from cudagraph buffer before next replay
         if step == 0 and RANK == 0:
@@ -487,9 +528,28 @@ def main():
                       f"(expected ~10.8) - label leak or data bug", flush=True)
                 raise SystemExit(1)
             print(f"SANITY OK: step-0 loss {loss.item():.2f}", flush=True)
-        loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-        opt.step()
+        if _graph_mode and step - _start > 3:
+            pass   # replay path: backward+opt already replayed inside the graphs
+        elif _warm is not None:
+            with torch.cuda.stream(_warm):
+                loss.backward()
+            if WORLD > 1:
+                torch.cuda.default_stream().wait_stream(_warm)
+                grads = [p.grad for p in _raw.parameters() if p.grad is not None]
+                _flat = torch._utils._flatten_dense_tensors(grads)
+                torch.distributed.all_reduce(_flat)
+                _flat.div_(WORLD)
+                for g, f in zip(grads, torch._utils._unflatten_dense_tensors(_flat, grads)):
+                    g.copy_(f)
+                _warm.wait_stream(torch.cuda.default_stream())
+            with torch.cuda.stream(_warm):
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                opt.step()
+            torch.cuda.current_stream().wait_stream(_warm)
+        else:
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            opt.step()
         if step % 25 == 0 and RANK == 0:
             tps = (step + 1) * WORLD * A.bs * A.seq / max(time.time() - t0, 1)
             wandb.log({"train/loss": loss.item(), "train/lr": lr,
@@ -501,7 +561,7 @@ def main():
             # the train cache by construction) or the cache tail as the proxy
             model.eval()
             with torch.no_grad():
-                if hasattr(torch.compiler, "cudagraph_mark_step_begin"):
+                if A.compile and hasattr(torch.compiler, "cudagraph_mark_step_begin"):
                     torch.compiler.cudagraph_mark_step_begin()
                 if getattr(A, "val_file", None):
                     vf = torch.load(A.val_file, weights_only=True, mmap=True)
