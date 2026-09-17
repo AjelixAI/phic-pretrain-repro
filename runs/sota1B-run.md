@@ -118,3 +118,15 @@
 | the val-ctx generation | "is a good thing. I don't know what" | "is a good thing to do. I know that" | "is a very important thing. I know that I" | fluent, the increasing connectivity |
 
 **The reading**: the progressing on every instrument that can resolve change at 5.5B tokens — the ARC's first above-noise movement and the LAMBADA's near-doubling confirm the data-scaling curves; the HellaSwag/PIQA's flatness matches the matched-stage Pythia reference. The mid-run re-check at ~30B tokens (~step 155k) is the decisive read.
+
+## The four-checkpoint benchmark trajectory (through step 42,000, 8.3B tokens)
+
+| benchmark | 14,000 | 28,000 | 42,000 | trend |
+|---|---|---|---|---|
+| ARC-Easy acc | 0.290 | 0.303 | 0.288 | the noise band (~0.29-0.30): the knowledge: the slow |
+| HellaSwag acc | 0.302 | 0.300 | 0.296 | flat (the expected) |
+| PIQA acc (n=200) | 0.499 | 0.465 | **0.525** | the first above-chance movement (the 200-sample noise ±3.5pts: the promising, the unconfirmed) |
+| LAMBADA acc | 0.027 | 0.046 | 0.038 | the noisy up-trend (0.027 -> 0.046 -> 0.038: the window/variance) |
+| the val-ctx generation | "a good thing. I don't know what" | "a very important thing. I know that I" | "a very good idea. It is a very" | the fluent throughout |
+
+The 42,000's read: the val-ctx generation stays fluent; the PIQA's 0.525 = the first above-chance print (the 200-sample CI ~±3.5: the suggestive not the confirmed); the LAMBADA/ARC: the inside their noise bands. The stable-phase benchmarks: the flat-to-slowly-rising: the consistent with the matched-stage reference. The decisive read: the ~30B-token re-check (~step 155k).
