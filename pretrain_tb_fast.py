@@ -568,19 +568,31 @@ def main():
             with torch.no_grad():
                 if A.compile and hasattr(torch.compiler, "cudagraph_mark_step_begin"):
                     torch.compiler.cudagraph_mark_step_begin()
+                # MULTI-WINDOW VAL: 8 windows spread across the fixed file,
+                # averaged. The single-window val had sigma~0.14 across slices
+                # (measured 4.25-4.59 on the SAME model) - the decay-phase drop
+                # and cross-restart comparisons need a low-noise estimate.
+                # Cost ~8 forwards per val (negligible at the 500-step cadence).
+                NVALWIN = 8
+                def win_loss(vfile, base_off):
+                    vfx = torch.load(vfile, weights_only=True, mmap=True)
+                    span = max(vfx.numel() - TPB, 1)
+                    stride = max(span // NVALWIN, TPB)
+                    tot, cnt = 0.0, 0
+                    for k in range(NVALWIN):
+                        voff_k = (base_off + k * stride) % span
+                        vb_k = torch.as_tensor(np.asarray(vfx[voff_k:voff_k + TPB])).long().to(DEV).view(A.bs, A.seq)
+                        _, vl_k = model(vb_k, labels=vb_k)
+                        tot += vl_k.item(); cnt += 1
+                    del vfx
+                    return tot / cnt
                 if getattr(A, "val_file", None):
-                    vf = torch.load(A.val_file, weights_only=True, mmap=True)
-                    voff = (step * 7919) % max(vf.numel() - TPB, 1)
-                    vb = torch.as_tensor(np.asarray(vf[voff:voff + TPB])).long().to(DEV).view(A.bs, A.seq)
-                    _, vloss = model(vb, labels=vb)
+                    vloss = torch.tensor(win_loss(A.val_file, step * 7919))
                 else:
                     vb = flat[-TPB:].view(A.bs, A.seq).long().to(DEV)   # unseen tail
                     _, vloss = model(vb, labels=vb)
                 if getattr(A, "val_file2", None):
-                    vf2 = torch.load(A.val_file2, weights_only=True, mmap=True)
-                    voff2 = (step * 104729) % max(vf2.numel() - TPB, 1)
-                    vb2 = torch.as_tensor(np.asarray(vf2[voff2:voff2 + TPB])).long().to(DEV).view(A.bs, A.seq)
-                    _, vloss2 = model(vb2, labels=vb2)
+                    vloss2 = torch.tensor(win_loss(A.val_file2, step * 104729))
             model.train()
             if RANK == 0:
                 wandb.log({"val/general": vloss.item()}, step=step)
