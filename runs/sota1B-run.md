@@ -214,3 +214,10 @@ flat (their movement is sub-linear in loss and below their noise floor).
 Script: /tmp/ppl_sweep.py (B=1, chunked CE - GPU7 has ~5GB free).
 Benchmark series extended: 67,900 -> ARC-Easy 0.304, HellaSwag 0.302,
 LAMBADA 0.051 (LAMBADA is the only MC benchmark still visibly climbing).
+
+## PIQA series filled in (2026-09-17 evening)
+PIQA was only in the v1 eval script (run once at mile 14,000). Series completed
+with the v1 ll_rank on the local milestones:
+  14,000: 0.4990 | 56,000: 0.4981 | 61,600: 0.4971 | 65,100: 0.5068 | 67,900: 0.4971
+Dead flat at random (0.50, sigma ~0.009) - physical-commonsense selection is a
+late-emerging skill; expect movement only after the decay phase drops the loss.
