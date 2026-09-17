@@ -172,3 +172,11 @@ harness: max rel loss diff 0.00026 over 30 steps -> GATE PASS. Capture crash was
 a launch race (pinned launches fix it). Outcome: graph mode is validated; adopted
 only where it pays (the H200/B200 continuation config with FP8 GEMMs), not for a
 ~3-4% restart of the live run. Details: /root/phi/graph_gate_fix.md
+
+## Power-limit fix: 550W -> 600W (2026-09-17 14:47, live, no restart)
+The Server Edition cards were power-throttled: instantaneous 550.5W vs a 550W
+cap while the default/max is 600W. Raised GPUs 0-3 to 600W via nvidia-smi.
+Measured: 100 steps in 169 s = 116.3K tok/s vs the ~101K baseline = +15.2%,
+at ~585W sustained, SM clocks 2347-2370 of 2430. Zero-risk lever found by
+checking the power ceiling; the "thermal envelope" theory of the MFU gap was
+wrong - it was a power-cap misconfiguration.
