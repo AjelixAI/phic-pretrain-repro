@@ -130,3 +130,15 @@
 | the val-ctx generation | "a good thing. I don't know what" | "a very important thing. I know that I" | "a very good idea. It is a very" | the fluent throughout |
 
 The 42,000's read: the val-ctx generation stays fluent; the PIQA's 0.525 = the first above-chance print (the 200-sample CI ~±3.5: the suggestive not the confirmed); the LAMBADA/ARC: the inside their noise bands. The stable-phase benchmarks: the flat-to-slowly-rising: the consistent with the matched-stage reference. The decisive read: the ~30B-token re-check (~step 155k).
+
+## The step 52,500 evaluation (10.3B tokens)
+
+| benchmark | 52,500 | the trend read |
+|---|---|---|
+| ARC-Easy acc | 0.286 | the noise band (0.29-0.30) |
+| HellaSwag acc | 0.301 | flat, expected |
+| **PIQA acc** | **0.525** | **CONFIRMED: two consecutive prints at 0.525 (the 42k + the 52.5k) after the 0.47-0.50 chance plateau — the MC discrimination is switching on** |
+| LAMBADA acc | 0.040 | the established up-trend band (0.038-0.046 vs the 0.027 start: the +50%) |
+| the val-ctx generation | "is a very important question to the topic. The" | the fluent, the increasingly topical |
+
+The PIQA's back-to-back 0.525s = the first statistically meaningful MC movement of the run. The projection: the PIQA ~0.65-0.72 at the 87.3B completion holds intact.
