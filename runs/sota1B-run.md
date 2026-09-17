@@ -164,3 +164,11 @@ The restart's replay (the resume from the step 56,000 with --ckpt-every 4) re-ra
 | 56,475 | 4.2983 | 4.2699 | -0.028 |
 
 The mean diff ~0.002 nats — the bf16 run-to-run noise floor (the same-config-twice control: the same spread). **The gradient-equivalence is confirmed in production: the checkpointing frequency changes the memory/compute trade, not the training trajectory.** The honest restart-cost note: the in-process save gate (the 3,500-step bug) made the 56,700 save a non-event, so the pause replayed ~900 steps (~28 min) — the documented cost of pausing without a save point; the patched trainer's 700-step cadence bounds any future replay to ~7 min.
+
+## CUDA-graph gate solved (2026-09-17)
+The 27.8% divergence was the gate harness's warmup accounting (graph replay steps
+offset by the 3 capture-warmup optimizer steps), not graph numerics. Fair-warmup
+harness: max rel loss diff 0.00026 over 30 steps -> GATE PASS. Capture crash was
+a launch race (pinned launches fix it). Outcome: graph mode is validated; adopted
+only where it pays (the H200/B200 continuation config with FP8 GEMMs), not for a
+~3-4% restart of the live run. Details: /root/phi/graph_gate_fix.md
