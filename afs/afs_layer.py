@@ -13,24 +13,19 @@ class AFSFFN(nn.Module):
         super().__init__()
         self.d, self.E, self.hard_k = d, E, hard_k
         self.keys = nn.Parameter(torch.randn(E, d) / d ** 0.5)
-        self.rows = nn.ModuleList()
-        for _ in range(E):
-            self.rows.append(nn.Sequential(
-                nn.Linear(d, f_row, bias=False), nn.SiLU(),
-                nn.Linear(f_row, f_row, bias=False), nn.SiLU(),
-                nn.Linear(f_row, d, bias=False)))
+        g = torch.Generator().manual_seed(1234)
+        # rows as ONE stacked parameter each (gradient-connected under bmm)
+        self.W1 = nn.Parameter(torch.randn(E, d, f_row, generator=g) / d ** 0.5)
+        self.W2 = nn.Parameter(torch.randn(E, f_row, f_row, generator=g) / f_row ** 0.5)
+        self.W3 = nn.Parameter(torch.randn(E, f_row, d, generator=g) / f_row ** 0.5)
+        self.f_row = f_row
         self.drop = nn.Dropout(dropout)
 
     def scores(self, x):                       # [B,S,E]
         return (x @ self.keys.T) / self.keys.shape[1] ** 0.5
 
     def _stack_rows(self):
-        if not hasattr(self, '_W1'):
-            with torch.no_grad():
-                self._W1 = torch.stack([r[0].weight.T for r in self.rows])  # [E, d, f]
-                self._W2 = torch.stack([r[2].weight.T for r in self.rows])  # [E, f, f]
-                self._W3 = torch.stack([r[4].weight.T for r in self.rows])  # [E, f, d]
-        return self._W1, self._W2, self._W3
+        return self.W1, self.W2, self.W3
 
     def forward_bmm(self, x):
         """Batched soft path: all rows for the whole batch in 3 bmms."""
@@ -48,6 +43,22 @@ class AFSFFN(nn.Module):
     def forward(self, x):
         if not self.hard_k:
             return self.forward_bmm(x)     # batched soft: all rows in 3 bmms
+        s = self.scores(x)
+        if self.training and self.E >= 8:
+            # TRAINING under the E-independent protocol: top-k-normalized
+            # straight-through weights (sum over selected = 1 for any E),
+            # computed on the batched bmm outputs (fast, correct).
+            W1, W2, W3 = self._stack_rows()
+            B, S, d = x.shape
+            xf = x.reshape(1, B * S, d).expand(self.E, -1, -1)
+            h1 = torch.bmm(xf, W1); h2 = torch.bmm(F.silu(h1), W2)
+            h3 = torch.bmm(F.silu(h2), W3)                       # [E, B*S, d]
+            topv, topi = s.topk(self.hard_k, dim=-1)             # [B,S,k]
+            w_sel = topv.softmax(-1)                              # sums to 1 over k, any E
+            w_full = torch.zeros_like(s).scatter_(-1, topi, w_sel)
+            w_st = w_full + (s.softmax(-1) - w_full).detach()     # ST: gradient of the soft weights
+            y = (h3.transpose(0, 1) * w_st.reshape(B * S, self.E, 1)).sum(1)
+            return self.drop(y.reshape(B, S, d))
         s = self.scores(x)
         if self.hard_k and self.hard_k < self.E:
             topv, topi = s.topk(self.hard_k, dim=-1)
@@ -67,15 +78,15 @@ class AFSFFN(nn.Module):
         return self.drop(out)
 
     def _apply_gathered(self, x, idx, wj):
-        # per-token row selection without materializing all rows:
-        # compute per unique row id in this batch (small k keeps this cheap)
+        # per-token row selection via the stacked parameters (gradient-connected)
         out = torch.zeros_like(x)
         flat = idx.reshape(-1)
         wflat = wj.reshape(-1)
         xflat = x.reshape(-1, x.shape[-1])
         for e in flat.unique():
             m = flat == e
-            y = self.rows[e](xflat[m])
+            xs = xflat[m]
+            y = (F.silu(F.silu(xs @ self.W1[e]) @ self.W2[e]) @ self.W3[e])
             out.view(-1, out.shape[-1])[m] = y * wflat[m][:, None]
         return out
 
