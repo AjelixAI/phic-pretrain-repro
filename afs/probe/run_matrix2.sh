@@ -13,7 +13,7 @@ run() { CUDA_VISIBLE_DEVICES=$1 $P $S $2 $COMMON --tag "$3" 2>&1 | grep -aE '^\[
   run 1 "--ffn afs --E 32  --n-persons 20000" "v2_N20k_afs32" ) &
 ( run 2 "--ffn afs --E 128 --n-persons 2000"  "v2_N2k_afs128"; \
   run 2 "--ffn afs --E 128 --n-persons 20000" "v2_N20k_afs128" ) &
-( run 3 "--ffn pk --E 4096 --n-persons 2000"  "v2_N2k_pk4096"; \
-  run 3 "--ffn pk --E 4096 --n-persons 20000" "v2_N20k_pk4096" ) &
+( run 3 "--ffn pk --E 4096 --bs 16 --n-persons 2000"  "v2_N2k_pk4096"; \
+  run 3 "--ffn pk --E 4096 --bs 16 --n-persons 20000" "v2_N20k_pk4096" ) &
 wait
 echo MATRIX2_DONE
