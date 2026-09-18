@@ -24,7 +24,30 @@ class AFSFFN(nn.Module):
     def scores(self, x):                       # [B,S,E]
         return (x @ self.keys.T) / self.keys.shape[1] ** 0.5
 
+    def _stack_rows(self):
+        if not hasattr(self, '_W1'):
+            with torch.no_grad():
+                self._W1 = torch.stack([r[0].weight.T for r in self.rows])  # [E, d, f]
+                self._W2 = torch.stack([r[2].weight.T for r in self.rows])  # [E, f, f]
+                self._W3 = torch.stack([r[4].weight.T for r in self.rows])  # [E, f, d]
+        return self._W1, self._W2, self._W3
+
+    def forward_bmm(self, x):
+        """Batched soft path: all rows for the whole batch in 3 bmms."""
+        W1, W2, W3 = self._stack_rows()
+        B, S, d = x.shape
+        xf = x.reshape(1, B * S, d).expand(self.E, -1, -1)      # [E, B*S, d]
+        h1 = torch.bmm(xf, W1)                                  # [E, B*S, f]
+        h2 = torch.bmm(F.silu(h1), W2)
+        h3 = torch.bmm(F.silu(h2), W3)                          # [E, B*S, d]
+        s = self.scores(x)                                      # [B,S,E]
+        w = s.softmax(-1)
+        y = (h3.transpose(0, 1) * w.reshape(B * S, self.E, 1)).sum(1)
+        return self.drop(y.reshape(B, S, d))
+
     def forward(self, x):
+        if not self.hard_k:
+            return self.forward_bmm(x)     # batched soft: all rows in 3 bmms
         s = self.scores(x)
         if self.hard_k and self.hard_k < self.E:
             topv, topi = s.topk(self.hard_k, dim=-1)
@@ -74,6 +97,8 @@ class ProductKeyAFS(AFSFFN):
         return s1[..., :, None] + s2[..., None, :]
 
     def forward(self, x):
+        if not self.hard_k:
+            return AFSFFN.forward_bmm(self, x)
         s = self.scores(x).reshape(*x.shape[:-1], self.E1 * self.E2)
         if self.hard_k and self.hard_k < self.E1 * self.E2:
             topv, topi = s.topk(self.hard_k, dim=-1)

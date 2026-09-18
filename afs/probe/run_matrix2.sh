@@ -5,7 +5,7 @@
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True HF_HUB_OFFLINE=1
 P=/root/trainenv/bin/python
 S=/tmp/phic-pretrain-repro/afs/probe/probe_train.py
-COMMON="--exposures 10000 --steps 7325 --bs 32 --hard-k 2"
+COMMON="--exposures 25 --steps 7325 --bs 32 --hard-k 2"
 run() { CUDA_VISIBLE_DEVICES=$1 $P $S $2 $COMMON --tag "$3" 2>&1 | grep -aE '^\[|RESULT'; }
 ( run 0 "--ffn dense --dense-f 450 --n-persons 2000"  "v2_N2k_dense" ; \
   run 0 "--ffn dense --dense-f 450 --n-persons 20000" "v2_N20k_dense" ) &
