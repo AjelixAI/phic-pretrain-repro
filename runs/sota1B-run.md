@@ -274,3 +274,39 @@ watchdog restarted, schedule untouched (decay-start 317,925). The anneal
 machinery (anchor -> short decay -> eval -> resume) is now proven end-to-end
 and is exactly what the real anneal will run at 317,925 - with the full 2B-token
 tail (double this probe's window), expected to land val ~3.4-3.6, PPL ~55-70.
+
+## CAPACITY RESEARCH SYNTHESIS (2026-09-18) — literature-grounded
+### The definitive capacity accounting (verified via requires_grad)
+| component | params | role |
+|---|---|---|
+| embedding/head (tied, trained) | 205.6 M | language mechanics |
+| blocks/U/V corrections (trained) | **57.2 M** | **the FFN-analog knowledge store** |
+| basis stages (FROZEN, requires_grad=False) | 30.4 M | structure, zero learned bits |
+| TOTAL stored | 293.2 M | vs "1.08B dense-equiv" = composed-operator FLOP label |
+
+### Literature verdicts (scout-verified, arXiv IDs in repo refs)
+1. Allen-Zhu & Li 2404.05405: 2 bits/param knowledge ceiling (INT8-robust),
+   requires ~1000 exposures/fact (at ~100 exposures ~1 bit/param).
+   OUR NUMBERS: 57.2M FFN-analog x 2 bits = ~14 MB knowledge ceiling; AND
+   21B tokens / 57.2M params = 367 tok/param < 1000 -> WE ARE BOTH
+   capacity-limited AND exposure-limited. The benchmark flatness is doubly
+   explained and matches Pythia-410M-class curves exactly.
+2. Wei et al. 2406.16450 (closest published analog: block-diag + low-rank FFN
+   at 32% params): 1.35x training speedup, 2.6x inference speedup, and a
+   knowledge/PPL tax of 1.0-1.3 vs dense, mitigated to 0.4-0.6 by
+   self-guided training. Our flat knowledge benchmarks = the documented tax.
+3. LoRA/knowledge: capacity sub-linear in rank; 4x rank closed almost none of
+   the knowledge gap (Dennis 2607.21612: procedural knowledge is not low-rank;
+   rank-128 LoRA captures 43-51% of full-FT update norm). RANK WIDENING ALONE
+   WILL NOT FIX KNOWLEDGE - the ladder must test Mf-density and basis
+   unfreezing too.
+4. Zero-padded mid-run widening: precedent only in fine-tuning (IncreLoRA
+   2308.12043); in pretraining it is novel (our tool: fp64-exact, validated).
+### Implications for the roadmap
+- PPL path: intact (structure helps language mechanics; PPL 9.9 reference).
+- Knowledge path: bounded by the 57.2M correction store ~ 14 MB of knowledge;
+  scaling it means scaling the corrections toward dense parameter counts,
+  which erodes the size/efficiency advantage (Wei et al.'s tax persists even
+  then). The honest product line: efficiency-first models at moderate
+  knowledge, with the capacity-efficiency frontier now measurable via the
+  ladder probes (rank 256 ready; dense-Mf and basis-unfreeze transforms next).
