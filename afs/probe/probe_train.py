@@ -61,6 +61,7 @@ def main():
     args = p.parse_args()
     torch.manual_seed(0)
     corp = BioSCorpus(n_persons=args.n_persons, exposures=args.exposures)
+    args.vocab = corp.vocab
     m = TinyLM(args).to(args.dev)
     npar = sum(p.numel() for p in m.parameters() if p.requires_grad)
     ffn_par = sum(p.numel() for n_, p in m.named_parameters() if 'ffn' in n_ or 'keys' in n_)
@@ -72,8 +73,8 @@ def main():
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda s: min(1.0, s / 200) * (1 - s / args.steps * 0.9))
     def chunks():
         for i in range(0, T.numel() - args.bs * 256 - 1, args.bs * 256):
-            c = T[i:i + args.bs * 256 + 1].view(args.bs, -1)
-            yield c[:, :-1], c[:, 1:]
+            c = T[i:i + args.bs * 256 + 1]
+            yield c[:-1].view(args.bs, 256), c[1:].view(args.bs, 256)
     data = list(chunks())
     step, t0 = 0, __import__('time').time()
     while step < args.steps:
