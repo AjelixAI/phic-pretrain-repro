@@ -48,7 +48,7 @@ class TinyLM(nn.Module):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--ffn', default='afs', choices=['afs', 'dense', 'pk'])
-    p.add_argument('--E', type=int, default=32)
+    p.add_argument('--E', type=int, default=4096)
     p.add_argument('--E2', type=int, default=0)
     p.add_argument('--f-row', type=int, default=256)
     p.add_argument('--dense-f', type=int, default=1024)
@@ -67,7 +67,7 @@ def main():
     torch.manual_seed(0)
     corp = BioSCorpus(n_persons=args.n_persons, exposures=args.exposures)
     args.vocab = corp.vocab
-    m = TinyLM(args).to(args.dev)
+    m = TinyLM(args).bfloat16().to(args.dev)
     npar = sum(p.numel() for p in m.parameters() if p.requires_grad)
     ffn_par = sum(p.numel() for n_, p in m.named_parameters() if 'ffn' in n_ or 'keys' in n_)
     print(f"[{args.tag}] ffn={args.ffn} E={args.E} | trained {npar/1e6:.2f}M (ffn-store {ffn_par/1e6:.2f}M)", flush=True)
@@ -88,7 +88,7 @@ def main():
             if step >= args.steps: break
             xb, yb = data[rng.integers(len(data))]   # random chunk per step: no sequence memorization
             logits = m(xb)
-            loss = F.cross_entropy(logits.reshape(-1, logits.shape[-1]), yb.reshape(-1))
+            loss = F.cross_entropy(logits.reshape(-1, logits.shape[-1]).float(), yb.reshape(-1))
             opt.zero_grad(); loss.backward(); opt.step(); sched.step()
             if step % 500 == 0:
                 print(f"[{args.tag}] step {step} loss {loss.item():.4f}", flush=True)
