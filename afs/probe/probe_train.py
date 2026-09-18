@@ -74,7 +74,11 @@ def main():
     lines = corp.train_stream()
     flat = [t for l in lines for t in l + [corp.SEP]]
     T = torch.tensor(flat, device=args.dev)
-    opt = torch.optim.AdamW(m.parameters(), lr=args.lr, weight_decay=0.01)
+    try:
+        import bitsandbytes as bnb
+        opt = bnb.optim.AdamW8bit(m.parameters(), lr=args.lr, weight_decay=0.01)
+    except ImportError:
+        opt = torch.optim.AdamW(m.parameters(), lr=args.lr, weight_decay=0.01)
     sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda s: min(1.0, s / 200) * (1 - s / args.steps * 0.9))
     def chunks():
         for i in range(0, T.numel() - args.bs * 256 - 1, args.bs * 256):
