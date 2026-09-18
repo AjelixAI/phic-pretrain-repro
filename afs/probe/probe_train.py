@@ -1,7 +1,7 @@
 """Capacity probe: train a small LM with AFS or dense FFN on bioS facts,
 measure extractable recall -> bits/trained-param.
 Arms: --ffn afs --E 32|128|512 | --ffn dense --f-row <compute-matched>"""
-import torch, torch.nn as nn, torch.nn.functional as F, argparse, math, sys, os
+import torch, torch.nn as nn, torch.nn.functional as F, argparse, math, sys, os, numpy as np
 sys.path.insert(0, '/tmp/phic-pretrain-repro')
 sys.path.insert(0, '/tmp/phic-pretrain-repro/afs')
 sys.path.insert(0, '/tmp/phic-pretrain-repro/afs/probe')
@@ -82,9 +82,11 @@ def main():
             yield c[:-1].view(args.bs, 256), c[1:].view(args.bs, 256)
     data = list(chunks())
     step, t0 = 0, __import__('time').time()
+    rng = np.random.default_rng(0)
     while step < args.steps:
-        for xb, yb in data:
+        for _ in range(len(data)):
             if step >= args.steps: break
+            xb, yb = data[rng.integers(len(data))]   # random chunk per step: no sequence memorization
             logits = m(xb)
             loss = F.cross_entropy(logits.reshape(-1, logits.shape[-1]), yb.reshape(-1))
             opt.zero_grad(); loss.backward(); opt.step(); sched.step()
