@@ -237,3 +237,16 @@ LAMBADA keeps climbing (+14% per round); PPL drops -3.9% per 5B tokens,
 monotone through the whole plateau. The continuous instruments confirm the
 model keeps learning; the decay phase (starts step 317,925) is where the
 MC benchmarks are scheduled to move.
+
+## Reference anchors measured with OUR probes (2026-09-18)
+Same 150k-token wikitext-103 slice, same OLMo tokenizer (095_1B model), same
+LAMBADA 2000-probe protocol - apples-to-apples:
+| model | training tokens | WikiText-103 PPL | LAMBADA |
+|---|---|---|---|
+| OLMo-2-0425-1B (fully trained) | ~4T | 9.90 (CE 2.2922) | 0.6290 |
+| SmolLM2-1.7B | ~11T | n/a (own tokenizer) | 0.6515 |
+| OURS @ 87,500 (18.9B) | 18.9B | 124.00 | 0.0575 |
+Note: the reference probe had a chunked-CE target-indexing bug at batch>1
+(transposed rows/cols) that produced garbage (PPL 47k) - fixed to per-row CE;
+verified sane via a length-sweep (CE 2.9955@128 -> 2.4425@1024). Our own PPL
+sweep runs at B=1 and was never affected.
