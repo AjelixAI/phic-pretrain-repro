@@ -4,7 +4,8 @@ Arms: --ffn afs --E 32|128|512 | --ffn dense --f-row <compute-matched>"""
 import torch, torch.nn as nn, torch.nn.functional as F, argparse, math, sys, os
 sys.path.insert(0, '/tmp/phic-pretrain-repro')
 sys.path.insert(0, '/tmp/phic-pretrain-repro/afs')
-from afs_layer import AFSFFN
+sys.path.insert(0, '/tmp/phic-pretrain-repro/afs/probe')
+from afs_layer import AFSFFN, ProductKeyAFS
 from bios import BioSCorpus
 
 class Block(nn.Module):
@@ -14,10 +15,14 @@ class Block(nn.Module):
         self.qkv = nn.Linear(d, 3 * d, bias=False)
         self.o = nn.Linear(d, d, bias=False)
         self.nh = nh
-        self.ffn = (AFSFFN(d, args.f_row, args.E, hard_k=args.hard_k)
-                    if args.ffn == 'afs' else
-                    nn.Sequential(nn.Linear(d, args.dense_f, bias=False), nn.SiLU(),
-                                  nn.Linear(args.dense_f, d, bias=False)))
+        if args.ffn == 'pk':
+            E2 = args.E2 or int(args.E ** 0.5)
+            self.ffn = ProductKeyAFS(d, args.f_row, max(1, args.E // E2), E2, hard_k=args.hard_k)
+        elif args.ffn == 'afs':
+            self.ffn = AFSFFN(d, args.f_row, args.E, hard_k=args.hard_k)
+        else:
+            self.ffn = nn.Sequential(nn.Linear(d, args.dense_f, bias=False), nn.SiLU(),
+                                     nn.Linear(args.dense_f, d, bias=False))
     def forward(self, x):
         B, S, d = x.shape
         q, k, v = self.qkv(self.n1(x)).chunk(3, -1)
@@ -26,8 +31,7 @@ class Block(nn.Module):
             k.view(B, S, self.nh, -1).transpose(1, 2),
             v.view(B, S, self.nh, -1).transpose(1, 2), is_causal=True)
         x = x + self.o(a.transpose(1, 2).reshape(B, S, d))
-        f = self.ffn(self.n2(x))
-        return x + (f if isinstance(f, torch.Tensor) else f)
+        return x + self.ffn(self.n2(x))
 
 class TinyLM(nn.Module):
     def __init__(self, args):
@@ -43,14 +47,15 @@ class TinyLM(nn.Module):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument('--ffn', default='afs', choices=['afs', 'dense'])
+    p.add_argument('--ffn', default='afs', choices=['afs', 'dense', 'pk'])
     p.add_argument('--E', type=int, default=32)
-    p.add_argument('--f-row', type=int, default=512)
+    p.add_argument('--E2', type=int, default=0)
+    p.add_argument('--f-row', type=int, default=256)
     p.add_argument('--dense-f', type=int, default=1024)
     p.add_argument('--hard-k', type=int, default=0)
-    p.add_argument('--d', type=int, default=512)
+    p.add_argument('--d', type=int, default=256)
     p.add_argument('--L', type=int, default=4)
-    p.add_argument('--nh', type=int, default=8)
+    p.add_argument('--nh', type=int, default=4)
     p.add_argument('--n-persons', type=int, default=1000)
     p.add_argument('--exposures', type=int, default=50)
     p.add_argument('--steps', type=int, default=4000)

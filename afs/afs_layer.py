@@ -55,3 +55,39 @@ class AFSFFN(nn.Module):
             y = self.rows[e](xflat[m])
             out.view(-1, out.shape[-1])[m] = y * wflat[m][:, None]
         return out
+
+class ProductKeyAFS(AFSFFN):
+    """Product-key retrieval (T4): row (i,j) keyed by k1_i + k2_j.
+    Table size E1*E2 rows; scoring costs (E1+E2) dot products (T4/T8).
+    Rows are stored as a flat ModuleList of E1*E2 operators."""
+    def __init__(self, d, f_row, E1, E2, hard_k=0, dropout=0.0):
+        super().__init__(d, f_row, E1 * E2, hard_k=0, dropout=dropout)
+        self.E1, self.E2 = E1, E2
+        self.keys = None
+        self.k1 = nn.Parameter(torch.randn(E1, d) / d ** 0.5)
+        self.k2 = nn.Parameter(torch.randn(E2, d) / d ** 0.5)
+        self.hard_k = hard_k
+
+    def scores(self, x):                       # [B,S,E1,E2] via two matvecs
+        s1 = x @ self.k1.T                      # [B,S,E1]
+        s2 = x @ self.k2.T                      # [B,S,E2]
+        return s1[..., :, None] + s2[..., None, :]
+
+    def forward(self, x):
+        s = self.scores(x).reshape(*x.shape[:-1], self.E1 * self.E2)
+        if self.hard_k and self.hard_k < self.E1 * self.E2:
+            topv, topi = s.topk(self.hard_k, dim=-1)
+            w = topv.softmax(-1)
+            w = w + (s.softmax(-1).gather(-1, topi) - w).detach()
+            out = torch.zeros_like(x)
+            flat_i = topi.reshape(-1); w_f = w.reshape(-1)
+            x_f = x.reshape(-1, x.shape[-1]); o_f = out.view(-1, out.shape[-1])
+            for e in flat_i.unique():
+                m = flat_i == e
+                o_f[m] = self.rows[e](x_f[m]) * w_f[m][:, None]
+            return self.drop(out)
+        w = s.softmax(-1)
+        out = 0.0
+        for e, row in enumerate(self.rows):
+            out = out + w[..., e:e + 1] * row(x)
+        return self.drop(out)
