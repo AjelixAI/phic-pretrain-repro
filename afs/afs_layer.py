@@ -105,11 +105,10 @@ class ProductKeyAFS(AFSFFN):
             w = topv.softmax(-1)
             w = w + (s.softmax(-1).gather(-1, topi) - w).detach()
             out = torch.zeros_like(x)
-            flat_i = topi.reshape(-1); w_f = w.reshape(-1)
-            x_f = x.reshape(-1, x.shape[-1]); o_f = out.view(-1, out.shape[-1])
-            for e in flat_i.unique():
-                m = flat_i == e
-                o_f[m] = self.rows[e](x_f[m]) * w_f[m][:, None]
+            for j in range(self.hard_k):       # per-selection gather (k-dim handled)
+                idx = topi[..., j]
+                wj = w[..., j]
+                out = out + self._apply_gathered(x, idx, wj)
             return self.drop(out)
         w = s.softmax(-1)
         out = 0.0
