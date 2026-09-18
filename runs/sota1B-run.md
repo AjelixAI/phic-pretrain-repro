@@ -310,3 +310,15 @@ tail (double this probe's window), expected to land val ~3.4-3.6, PPL ~55-70.
   then). The honest product line: efficiency-first models at moderate
   knowledge, with the capacity-efficiency frontier now measurable via the
   ladder probes (rank 256 ready; dense-Mf and basis-unfreeze transforms next).
+
+## STATE MARKER 2026-09-18 ~15:00 — main run healthy, AFS research branch opened
+- Main run: resumed from the pre-anneal anchor, step ~90,3xx+, schedule intact
+  (325,560 steps, decay-start 317,925), watchdog active, ~109K tok/s.
+- Anneal probe results + the capacity research synthesis: above in this file.
+- DECISION: open the `afs` research branch (Associative Factor Store — the
+  retrieval-FFN architecture: keys + E factorized rows, top-k/soft retrieval,
+  knowledge capacity scales by appending rows, per-token traffic constant vs E).
+  Target spec: dense-1B knowledge (~707M FFN params) at ~200M-dense per-token
+  compute and ~160x less traffic; optics-portable via static row panels +
+  score-weighted readout.
+- Box: sota1B_afs/ folder opened for AFS artifacts.
