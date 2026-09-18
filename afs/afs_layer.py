@@ -22,6 +22,8 @@ class AFSFFN(nn.Module):
         self.drop = nn.Dropout(dropout)
 
     def scores(self, x):                       # [B,S,E]
+        if getattr(self, 'freeze_keys', False):
+            return (x @ self.keys.detach().T) / self.keys.shape[1] ** 0.5
         return (x @ self.keys.T) / self.keys.shape[1] ** 0.5
 
     def _stack_rows(self):

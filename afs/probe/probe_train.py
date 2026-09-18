@@ -20,6 +20,7 @@ class Block(nn.Module):
             self.ffn = ProductKeyAFS(d, args.f_row, max(1, args.E // E2), E2, hard_k=args.hard_k)
         elif args.ffn == 'afs':
             self.ffn = AFSFFN(d, args.f_row, args.E, hard_k=args.hard_k)
+            if args.freeze_keys: self.ffn.freeze_keys = True
         else:
             self.ffn = nn.Sequential(nn.Linear(d, args.dense_f, bias=False), nn.SiLU(),
                                      nn.Linear(args.dense_f, d, bias=False))
@@ -53,6 +54,7 @@ def main():
     p.add_argument('--f-row', type=int, default=256)
     p.add_argument('--dense-f', type=int, default=1024)
     p.add_argument('--hard-k', type=int, default=0)
+    p.add_argument('--freeze-keys', action='store_true')
     p.add_argument('--d', type=int, default=256)
     p.add_argument('--L', type=int, default=4)
     p.add_argument('--nh', type=int, default=4)
