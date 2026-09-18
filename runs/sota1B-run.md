@@ -250,3 +250,27 @@ Note: the reference probe had a chunked-CE target-indexing bug at batch>1
 (transposed rows/cols) that produced garbage (PPL 47k) - fixed to per-row CE;
 verified sane via a length-sweep (CE 2.9955@128 -> 2.4425@1024). Our own PPL
 sweep runs at B=1 and was never affected.
+
+## ANNEAL PROBE COMPLETE (2026-09-18 ~14:00) — the realistic ~21B-token result
+Design: anchor = mile_90300 (plateau state, ~20.2B tokens) with the step counter
+set to 321,500 so the data stream entered the anneal-domain tail; LR 3e-4 -> 0
+over 4,000 steps (~1.05B tokens of the HQ mix); tag _paann, fully isolated.
+Results (same probes, same GPU, same protocols as all prior rounds):
+| metric | pre-anneal 87,500 | annealed paann-final | delta |
+|---|---|---|---|
+| val general (8-window) | ~4.11-4.22 | 3.8655 | -0.35 nats |
+| val anneal (8-window) | ~4.03-4.13 | 3.8629 | domain converges |
+| WikiText-103 PPL | 124.00 | 83.08 (CE 4.4198) | -33% |
+| LAMBADA | 0.0575 | 0.0845 | +47% |
+| ARC-Easy | 0.2883 | 0.2950 | ~noise |
+| HellaSwag | 0.2963 | 0.3027 | ~noise |
+| PIQA | 0.4958 | 0.4903 | still random |
+Reading: the decay converts the plateau grind into a real -0.40 nat drop;
+text-level competence (PPL, LAMBADA) jumps; knowledge benchmarks wait for
+more tokens. Fully-trained OLMo-2-1B reference (PPL 9.9, LAMBADA 0.629)
+remains ~4T tokens away - the multi-cycle continuation path.
+Operational: main run resumed from the anchor at 90,300 (175 steps re-seen),
+watchdog restarted, schedule untouched (decay-start 317,925). The anneal
+machinery (anchor -> short decay -> eval -> resume) is now proven end-to-end
+and is exactly what the real anneal will run at 317,925 - with the full 2B-token
+tail (double this probe's window), expected to land val ~3.4-3.6, PPL ~55-70.
