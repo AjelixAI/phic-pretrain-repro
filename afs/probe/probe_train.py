@@ -6,6 +6,7 @@ sys.path.insert(0, '/tmp/phic-pretrain-repro')
 sys.path.insert(0, '/tmp/phic-pretrain-repro/afs')
 sys.path.insert(0, '/tmp/phic-pretrain-repro/afs/probe')
 from afs_layer import AFSFFN, ProductKeyAFS
+import afs_layer
 from bios import BioSCorpus
 
 class Block(nn.Module):
@@ -15,7 +16,12 @@ class Block(nn.Module):
         self.qkv = nn.Linear(d, 3 * d, bias=False)
         self.o = nn.Linear(d, d, bias=False)
         self.nh = nh
-        if args.ffn == 'pk':
+        if args.ffn == 'afs' and args.shared_rank:
+            afs_layer.AFSFFN.__init__.__defaults__ = None  # noop guard
+            import importlib, afs_layer as AL
+            importlib.reload(AL)
+            self.ffn = AL.AFSFFN(d, args.f_row, args.E, hard_k=args.hard_k, shared_rank=args.shared_rank)
+        elif args.ffn == 'pk':
             E2 = args.E2 or int(args.E ** 0.5)
             self.ffn = ProductKeyAFS(d, args.f_row, max(1, args.E // E2), E2, hard_k=args.hard_k)
         elif args.ffn == 'afs':
@@ -51,6 +57,7 @@ def main():
     p.add_argument('--ffn', default='afs', choices=['afs', 'dense', 'pk'])
     p.add_argument('--E', type=int, default=4096)
     p.add_argument('--E2', type=int, default=0)
+    p.add_argument('--shared-rank', type=int, default=0)
     p.add_argument('--f-row', type=int, default=256)
     p.add_argument('--dense-f', type=int, default=1024)
     p.add_argument('--hard-k', type=int, default=0)

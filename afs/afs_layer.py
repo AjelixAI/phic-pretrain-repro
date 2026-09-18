@@ -7,18 +7,39 @@ through (serve — reads only k rows: the bandwidth solve)."""
 import torch, torch.nn as nn, torch.nn.functional as F
 
 class AFSFFN(nn.Module):
-    def __init__(self, d, f_row, E, hard_k=0, dropout=0.0):
+    def __init__(self, d, f_row, E, hard_k=0, dropout=0.0, shared_rank=0):
         """d: model width; f_row: per-row FFN hidden width; E: rows;
-        hard_k: >0 -> hard top-k with straight-through soft softmax."""
+        hard_k: >0 -> hard top-k with straight-through soft softmax.
+        shared_rank>0: rows = frozen shared matrices + per-row rank-r
+        corrections (the real-config row design; W1-3 then frozen)."""
         super().__init__()
         self.d, self.E, self.hard_k = d, E, hard_k
         self.keys = nn.Parameter(torch.randn(E, d) / d ** 0.5)
         g = torch.Generator().manual_seed(1234)
         # rows as ONE stacked parameter each (gradient-connected under bmm)
-        self.W1 = nn.Parameter(torch.randn(E, d, f_row, generator=g) / d ** 0.5)
-        self.W2 = nn.Parameter(torch.randn(E, f_row, f_row, generator=g) / f_row ** 0.5)
-        self.W3 = nn.Parameter(torch.randn(E, f_row, d, generator=g) / f_row ** 0.5)
+        self.W1 = nn.Parameter(torch.randn(E, d, f_row, generator=g) / d ** 0.5,
+                               requires_grad=not shared_rank)
+        self.W2 = nn.Parameter(torch.randn(E, f_row, f_row, generator=g) / f_row ** 0.5,
+                               requires_grad=not shared_rank)
+        self.W3 = nn.Parameter(torch.randn(E, f_row, d, generator=g) / f_row ** 0.5,
+                               requires_grad=not shared_rank)
         self.f_row = f_row
+        # v2 shared-prior mode: frozen shared matrices + per-row low-rank
+        # corrections (the real-config row design; measures the structured tax)
+        self.shared_rank = 0
+        if shared_rank:
+            self.shared_rank = shared_rank
+            g2 = torch.Generator().manual_seed(4321)
+            self.S1 = nn.Parameter(torch.randn(d, f_row, generator=g2) / d ** 0.5, requires_grad=False)
+            self.S2 = nn.Parameter(torch.randn(f_row, f_row, generator=g2) / f_row ** 0.5, requires_grad=False)
+            self.S3 = nn.Parameter(torch.randn(f_row, d, generator=g2) / f_row ** 0.5, requires_grad=False)
+            self.A1 = nn.Parameter(torch.randn(E, d, shared_rank, generator=g2) / d ** 0.5)
+            self.B1 = nn.Parameter(torch.randn(E, shared_rank, f_row, generator=g2) / shared_rank ** 0.5)
+            self.A2 = nn.Parameter(torch.randn(E, f_row, shared_rank, generator=g2) / f_row ** 0.5)
+            self.B2 = nn.Parameter(torch.randn(E, shared_rank, f_row, generator=g2) / shared_rank ** 0.5)
+            self.A3 = nn.Parameter(torch.randn(E, f_row, shared_rank, generator=g2) / f_row ** 0.5)
+            self.B3 = nn.Parameter(torch.randn(E, shared_rank, d, generator=g2) / shared_rank ** 0.5)
+            for p in (self.W1, self.W2, self.W3): p.requires_grad = False
         self.drop = nn.Dropout(dropout)
 
     def scores(self, x):                       # [B,S,E]
@@ -31,6 +52,20 @@ class AFSFFN(nn.Module):
 
     def forward_bmm(self, x):
         """Batched soft path: all rows for the whole batch in 3 bmms."""
+        if self.shared_rank:
+            B, S, d = x.shape
+            xf = x.reshape(1, B * S, d)
+            base1 = xf @ self.S1                        # [BS, f] shared, computed once
+            corr1 = torch.bmm(xf.expand(self.E, -1, -1), self.A1) @ self.B1   # [E, BS, f]
+            h1 = F.silu(base1[None] + corr1)
+            corr2 = torch.bmm(h1, self.A2) @ self.B2
+            h2 = F.silu(h1 @ self.S2 + corr2)
+            corr3 = torch.bmm(h2, self.A3) @ self.B3
+            h3 = h2 @ self.S3 + corr3                    # [E, BS, d]
+            s = self.scores(x)
+            w = s.softmax(-1)
+            y = (h3.transpose(0, 1) * w.reshape(B * S, self.E, 1)).sum(1)
+            return self.drop(y.reshape(B, S, d))
         W1, W2, W3 = self._stack_rows()
         B, S, d = x.shape
         xf = x.reshape(1, B * S, d).expand(self.E, -1, -1)      # [E, B*S, d]
