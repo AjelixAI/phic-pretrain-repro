@@ -221,3 +221,19 @@ with the v1 ll_rank on the local milestones:
   14,000: 0.4990 | 56,000: 0.4981 | 61,600: 0.4971 | 65,100: 0.5068 | 67,900: 0.4971
 Dead flat at random (0.50, sigma ~0.009) - physical-commonsense selection is a
 late-emerging skill; expect movement only after the decay phase drops the loss.
+
+## Full eval suite @ mile 87,500 (2026-09-18 morning, ~18.9B tokens)
+Same scripts/batch sizes as all previous rounds (GPU 7, offline datasets).
+| metric | 52,500 (10.3B) | 67,900 (13.9B) | 87,500 (18.9B) |
+|---|---|---|---|
+| ARC-Easy | 0.2858 | 0.3043 | 0.2883 |
+| HellaSwag | 0.3013 | 0.3020 | 0.2963 |
+| PIQA | - | 0.4971 | 0.4958 |
+| LAMBADA | 0.0400* | 0.0505 | 0.0575 |
+| WikiText-103 PPL | - | 129.09 | 124.00 |
+*52,500's LAMBADA from the series (0.0395@42,000, 0.040@52,500 approx).
+Reading: MC benchmarks flat within noise (plateau-bound, sigma ~0.009);
+LAMBADA keeps climbing (+14% per round); PPL drops -3.9% per 5B tokens,
+monotone through the whole plateau. The continuous instruments confirm the
+model keeps learning; the decay phase (starts step 317,925) is where the
+MC benchmarks are scheduled to move.
