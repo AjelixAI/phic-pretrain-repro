@@ -322,3 +322,21 @@ tail (double this probe's window), expected to land val ~3.4-3.6, PPL ~55-70.
   compute and ~160x less traffic; optics-portable via static row panels +
   score-weighted readout.
 - Box: sota1B_afs/ folder opened for AFS artifacts.
+
+## RUN STOPPED AND ARCHIVED (2026-09-18 15:1x UTC) — by decision, pivot to AFS
+- Final state: step 91,550 reached; last FULL SAVE running.pt @step 91,000
+  (~17.9B tokens consumed, 21.1% of the 325,560-step schedule).
+- Val at stop: general ~4.11-4.22 band (8-window), anneal tracking at/below.
+- Throughput at stop: ~109K tok/s sustained (4x RTX PRO 6000 @ 600W, bs 16).
+- Restart count for the whole post-restart era: 0 crashes.
+- Checkpoint inventory:
+  * local: running.pt @91,000 + milestones 79,100 / 81,900 / 84,700 / 87,500 / 90,300
+    (+ PREANNEAL_ANCHOR, PROBE_ANCHOR r64->r256, anneal-probe final _paann).
+  * box (sota1B/): full milestone lineage back to 14,000 + running.pt @91,000
+    (synced at stop) + the anneal probe final.
+- RESUME (when decided): `nohup /root/phi/sota_watchdog.sh &` — it contains the
+  full resume command (bs 16, graphs-ready config, --resume running.pt).
+  Replay exposure: <=700 steps (~21 min of tokens).
+- GPU 0-3 are now FREE for the AFS build.
+- The capacity-probe arms (dense_cm / afs_E32 / afs_E128 / afs_E512) continue
+  on GPU 7; results land in afs_arms.log and the afs branch.
